@@ -1,0 +1,8 @@
+[package]
+name = "bevy_sqlx"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "*"
+sqlx = { version = "*", features = ["runtime-async-std", "sqlite"] }
