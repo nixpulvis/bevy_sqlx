@@ -143,7 +143,7 @@ impl BarPlugin {
             // Choose a random Foo to be associated with.
             if let Some(foo) = foos_query.iter().choose(&mut rand::thread_rng()) {
                 SqlxEvent::<Sqlite, Bar>::query(
-                    &format!("INSERT INTO bars(foo_id) VALUES ({})", foo.id))
+                    &format!("INSERT INTO bars(foo_id) VALUES ({}) RETURNING *", foo.id))
                     .send(&mut events)
                     .trigger(&mut commands);
             } else {
