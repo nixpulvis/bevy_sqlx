@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "*"
+bevy = { version = "*", default-features = false, features = ["multi_threaded"] }
 sqlx = { version = "*", features = ["runtime-async-std", "sqlite"] }
 
 [dev-dependencies]
