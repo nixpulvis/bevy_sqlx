@@ -4,7 +4,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use sqlx::FromRow;
 use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 
-#[derive(Component, FromRow, Debug, Default, Clone)]
+#[derive(Reflect, Component, FromRow, Debug, Default, Clone)]
 struct Foo {
     id: u32,
     text: String,
@@ -27,9 +27,9 @@ impl Plugin for FooPlugin {
         app.add_systems(Update, Self::send_foo_events);
         app.observe(|trigger: Trigger<SqlxEvent<Foo>>,
                   foo_query: Query<&Foo>| {
-            dbg!(trigger.event(), &foo_query);
+            dbg!({ "observe"; (trigger.event(), &foo_query.iter().len()) });
             for foo in &mut foo_query.iter() {
-                dbg!(&foo);
+                dbg!({ "observe"; &foo });
             }
         });
     }
@@ -80,7 +80,7 @@ impl FooPlugin {
 }
 
 
-#[derive(Component, FromRow, Debug, Default, Clone)]
+#[derive(Reflect, Component, FromRow, Debug, Default, Clone)]
 struct Bar {
     id: u32,
     foo_id: u32,
@@ -153,6 +153,8 @@ fn main() {
         .add_plugins(WorldInspectorPlugin::new())
         .add_plugins(FooPlugin)
         .add_plugins(BarPlugin)
+        .register_type::<Foo>()
+        .register_type::<Bar>()
         .add_systems(Update, query_spawned)
         .run();
 }

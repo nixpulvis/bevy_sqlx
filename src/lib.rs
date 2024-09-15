@@ -75,7 +75,7 @@ pub trait SqlxPrimaryKey {
     fn id(&self) -> Self::Column;
 }
 
-#[derive(Component, Debug)]
+#[derive(Reflect, Component, Debug)]
 pub struct SqlxData {
     pub query: String,
 }
@@ -113,6 +113,7 @@ impl<C: SqlxComponent> Plugin for SqlxPlugin<C> {
         app.insert_resource(SqlxDatabase { pool });
         app.insert_resource(SqlxTasks::<C>(Vec::new()));
         app.add_event::<SqlxEvent<C>>();
+        app.register_type::<SqlxData>();
         app.add_systems(Update, (Self::tasks, Self::entities));
     }
 }
@@ -138,12 +139,21 @@ impl<C: SqlxComponent> SqlxPlugin<C> {
     pub fn entities(
         world: &mut World,
         params: &mut SystemState<(
-            Query<(Entity, &C)>,
+            Query<(Entity, Ref<C>)>,
             Commands,
             ResMut<SqlxTasks<C>>,
         )>,
     ) {
         let (mut query, mut commands, mut tasks) = params.get_mut(world);
+
+        // for (entity, component) in &mut query {
+        //     // TODO: Send Encoded UPDATE
+        //     // TODO: Need a dirty bit to check so we don't send just
+        //     //       received updated entities.
+        //     if component.is_changed() && !component.is_added() {
+        //         dbg!("TODO: UPDATE");
+        //     }
+        // }
 
         tasks.0.retain_mut(|(sql, task)| {
             let status = block_on(future::poll_once(task));
