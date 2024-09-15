@@ -1,7 +1,6 @@
-use std::env;
 use bevy::prelude::*;
 use sqlx::FromRow;
-use sqlx::{Sqlite, SqlitePool};
+use sqlx::{Postgres, PgPool};
 use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 
 /// ### SQL Table Schema
@@ -13,13 +12,13 @@ use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 /// );
 #[derive(Component, FromRow, Debug)]
 struct Foo {
-    id: u32,
+    id: i32,
     flag: bool,
     text: String,
 }
 
 impl SqlxPrimaryKey for Foo {
-    type Column = u32;
+    type Column = i32;
 
     fn id(&self) -> Self::Column {
         self.id
@@ -27,23 +26,23 @@ impl SqlxPrimaryKey for Foo {
 }
 
 fn main() {
-    let url = env::var("DATABASE_URL").unwrap();
+    let url = "postgres://localhost/bevy_sqlx";
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(SqlxPlugin::<Sqlite, Foo>::url(&url))
+        .add_plugins(SqlxPlugin::<Postgres, Foo>::url(url))
         .add_systems(Startup, (delete, insert.after(delete)))
         .add_systems(Update, query)
         .run();
 }
 
-fn delete(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
-    SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos")
+fn delete(mut events: EventWriter<SqlxEvent<Postgres, Foo>>) {
+    SqlxEvent::<Postgres, Foo>::query("DELETE FROM foos")
         .send(&mut events);
 }
 
-fn insert(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
-    let sql = "INSERT INTO foos(text) VALUES ('insert') RETURNING *";
-    SqlxEvent::<Sqlite, Foo>::query(sql)
+fn insert(mut events: EventWriter<SqlxEvent<Postgres, Foo>>) {
+    let sql = "INSERT INTO foos(id, text) VALUES (1, 'insert') RETURNING *";
+    SqlxEvent::<Postgres, Foo>::query(sql)
         .send(&mut events);
 }
 

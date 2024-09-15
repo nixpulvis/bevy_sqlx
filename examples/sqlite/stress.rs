@@ -1,4 +1,3 @@
-use std::env;
 use bevy::prelude::*;
 use bevy::{app::ScheduleRunnerPlugin, utils::Duration};
 use sqlx::FromRow;
@@ -27,7 +26,7 @@ fn main() {
     let tick_rate = Duration::from_millis(1);
     let runner = ScheduleRunnerPlugin::run_loop(tick_rate);
 
-    let url = env::var("DATABASE_URL").unwrap();
+    let url = "sqlite:db/sqlite.db";
     App::new()
         .add_plugins(MinimalPlugins.set(runner))
         .add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url))

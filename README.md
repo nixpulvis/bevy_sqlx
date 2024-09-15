@@ -48,14 +48,10 @@ impl SqlxPrimaryKey for MyTable {
 }
 
 fn main() {
-    let pool = bevy::tasks::block_on(async {
-        let url = env::var("DATABASE_URL").unwrap();
-        SqlitePool::connect(&url).await.unwrap()
-    });
-
+    let url = env::var("DATABASE_URL").unwrap();
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(SqlxPlugin::<Sqlite, MyTable>::default())
+        .add_plugins(SqlxPlugin::<Sqlite, MyTable>::url(&url))
         .add_systems(Startup, insert)
         .add_systems(Update, query)
         .run();

@@ -12,17 +12,22 @@ rand = "*"
 bevy-inspector-egui = "*"
 
 [[example]]
-name = "minimal"
+name = "sqlite-minimal"
+path = "examples/sqlite/minimal.rs"
 required-features = ["bevy/bevy_winit"]
 
 [[example]]
-name = "sqlite"
+name = "sqlite-full"
+path = "examples/sqlite/full.rs"
 required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
 
 [[example]]
-name = "postgres"
+name = "sqlite-stress"
+path = "examples/sqlite/stress.rs"
+required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
+
+[[example]]
+name = "postgres-minimal"
+path = "examples/postgres/minimal.rs"
 required-features = ["sqlx/postgres", "bevy/bevy_winit"]
 
-[[example]]
-name = "stress"
-required-features = ["sqlx/sqlite", "bevy/bevy_winit"]

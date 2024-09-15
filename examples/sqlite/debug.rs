@@ -1,4 +1,3 @@
-use std::env;
 use rand::prelude::*;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
@@ -25,8 +24,8 @@ pub struct FooPlugin;
 
 impl Plugin for FooPlugin {
     fn build(&self, app: &mut App) {
-        let url = env::var("DATABASE_URL").unwrap();
-        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(&url));
+        let url = "sqlite:db/sqlite.db";
+        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
         app.add_systems(Update, Self::send_foo_events);
         app.observe(|trigger: Trigger<SqlxEvent<Sqlite, Foo>>,
                   foo_query: Query<&Foo>| {
