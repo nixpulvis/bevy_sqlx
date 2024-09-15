@@ -1,6 +1,5 @@
 use bevy::prelude::*;
-use sqlx::FromRow;
-use sqlx::{Sqlite, SqlitePool};
+use sqlx::{FromRow, Sqlite};
 use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 
 /// ### SQL Table Schema

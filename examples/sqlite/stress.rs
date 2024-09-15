@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 use bevy::{app::ScheduleRunnerPlugin, utils::Duration};
-use sqlx::FromRow;
-use sqlx::{Sqlite, SqlitePool};
+use sqlx::{FromRow, Sqlite};
 use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent, SqlxData};
 
 #[derive(Component, FromRow, Debug)]

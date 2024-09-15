@@ -1,8 +1,7 @@
 use rand::prelude::*;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use sqlx::FromRow;
-use sqlx::{Sqlite, SqlitePool};
+use sqlx::{FromRow, Sqlite};
 use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 
 #[derive(Reflect, Component, FromRow, Debug, Default, Clone)]
@@ -102,12 +101,8 @@ pub struct BarPlugin;
 
 impl Plugin for BarPlugin {
     fn build(&self, app: &mut App) {
-        let pool = bevy::tasks::block_on(async {
-            let url = env::var("DATABASE_URL").unwrap();
-            SqlitePool::connect(&url).await.unwrap()
-        });
-
-        app.add_plugins(SqlxPlugin::<Sqlite, Bar>::pool(pool));
+        let url = env::var("DATABASE_URL").unwrap();
+        app.add_plugins(SqlxPlugin::<Sqlite, Bar>::url(&url));
         app.add_systems(Update, Self::send_bar_events);
         app.observe(|trigger: Trigger<SqlxEvent<Sqlite, Bar>>,
                   bar_query: Query<&Bar>| {

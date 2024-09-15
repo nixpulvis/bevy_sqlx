@@ -1,6 +1,5 @@
 use bevy::prelude::*;
-use sqlx::FromRow;
-use sqlx::{Postgres, PgPool};
+use sqlx::{FromRow, Postgres};
 use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 
 /// ### SQL Table Schema

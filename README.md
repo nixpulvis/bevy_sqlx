@@ -15,11 +15,11 @@ DATABASE_URL="postgres://localhost/bevy_sqlx" cargo sqlx database setup
 DATABASE_URL="sqlite:db/sqlite.db" cargo test --features sqlx/sqlite
 
 # Run an example with Sqlite
-DATABASE_URL="sqlite:db/sqlite.db" cargo run --example sqlite \
+DATABASE_URL="sqlite:db/sqlite.db" cargo run --example sqlite-minimal \
     --features sqlx/sqlite,bevy/bevy_winit,bevy/wayland
 
 # Run an example with PostgreSQL
-DATABASE_URL="postgres://localhost/bevy_sqlx" cargo run --example postgres \
+DATABASE_URL="postgres://localhost/bevy_sqlx" cargo run --example postgres-minimal \
     --features sqlx/postgres,bevy/bevy_winit,bevy/wayland
 ```
 
