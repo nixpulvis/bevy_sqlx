@@ -14,7 +14,7 @@ bevy-inspector-egui = "*"
 [[example]]
 name = "sqlite-minimal"
 path = "examples/sqlite/minimal.rs"
-required-features = ["bevy/bevy_winit"]
+required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
 
 [[example]]
 name = "sqlite-full"
@@ -24,7 +24,7 @@ required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
 [[example]]
 name = "sqlite-stress"
 path = "examples/sqlite/stress.rs"
-required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
+required-features = ["sqlx/sqlite"]
 
 [[example]]
 name = "postgres-minimal"
