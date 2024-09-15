@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use bevy::{app::ScheduleRunnerPlugin, utils::Duration};
 use sqlx::FromRow;
-use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
+use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent, SqlxData};
 
-#[derive(Component, FromRow, Debug, Default, Clone)]
+#[derive(Component, FromRow, Clone, Debug)]
 struct Foo {
     id: u32,
     text: String,

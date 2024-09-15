@@ -13,23 +13,40 @@ use sqlx::{
     sqlite::SqlitePool,
 };
 
+pub trait SqlxComponent:
+    SqlxPrimaryKey +
+    Component +
+    for<'r> FromRow<'r, SqliteRow> +
+    Debug +
+    Clone +
+    Unpin
+{}
+impl<C> SqlxComponent for C
+where
+    C: SqlxPrimaryKey +
+        Component +
+        for<'r> FromRow<'r, SqliteRow> +
+        Debug +
+        Clone +
+        Unpin
+{}
+
 #[derive(Resource, Debug)]
 pub struct SqlxDatabase {
     pub pool: SqlitePool
 }
 
 #[derive(Resource)]
-pub struct SqlxTasks<C: Component + Clone + for<'r> FromRow<'r, SqliteRow>>
-(pub Vec<(String, Task<Result<Vec<C>, Error>>)>);
+pub struct SqlxTasks<C: SqlxComponent>(pub Vec<(String, Task<Result<Vec<C>, Error>>)>);
 
 
 #[derive(Event, Debug, Clone)]
-pub struct SqlxEvent<C: Component + Clone + for<'r> FromRow<'r, SqliteRow>> {
+pub struct SqlxEvent<C: SqlxComponent> {
     pub query: String,
     _c: PhantomData<C>,
 }
 
-impl<C: Component + Clone + for<'r> FromRow<'r, SqliteRow>> SqlxEvent<C> {
+impl<C: SqlxComponent> SqlxEvent<C> {
     pub fn query(string: &str) -> Self {
         SqlxEvent {
             query: string.to_string(),
@@ -57,19 +74,40 @@ pub trait SqlxPrimaryKey {
     fn id(&self) -> Self::Column;
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct SqlxData {
     pub query: String,
 }
 
-#[derive(Default)]
-pub struct SqlxPlugin<C: Component>(PhantomData<C>);
+pub struct SqlxPlugin<C: SqlxComponent> {
+    url: Option<String>,
+    _c: PhantomData<C>,
+}
 
-impl<C: Debug + Component + SqlxPrimaryKey + Clone + Unpin + for<'r> FromRow<'r, SqliteRow>> Plugin for SqlxPlugin<C> {
+impl<C: SqlxComponent> Default for SqlxPlugin<C> {
+    fn default() -> Self {
+        SqlxPlugin {
+            url: None,
+            _c: PhantomData,
+        }
+    }
+}
+
+impl<C: SqlxComponent> SqlxPlugin<C> {
+    pub fn url(string: &str) -> Self {
+        SqlxPlugin {
+            url: Some(string.to_string()),
+            _c: PhantomData,
+        }
+    }
+}
+
+impl<C: SqlxComponent> Plugin for SqlxPlugin<C> {
     fn build(&self, app: &mut App) {
         let pool = bevy::tasks::block_on(async {
-            let env = env::var("DATABASE_URL").unwrap();
-            SqlitePool::connect(&env).await.unwrap()
+            let url = self.url.clone()
+                .unwrap_or(env::var("DATABASE_URL").unwrap());
+            SqlitePool::connect(&url).await.unwrap()
         });
         app.insert_resource(SqlxDatabase { pool });
         app.insert_resource(SqlxTasks::<C>(Vec::new()));
@@ -78,7 +116,7 @@ impl<C: Debug + Component + SqlxPrimaryKey + Clone + Unpin + for<'r> FromRow<'r,
     }
 }
 
-impl<C: Debug + Component + SqlxPrimaryKey + Clone + Unpin + for<'r> FromRow<'r, SqliteRow>> SqlxPlugin<C> {
+impl<C: SqlxComponent> SqlxPlugin<C> {
     pub fn tasks(
         database: Res<SqlxDatabase>,
         mut tasks: ResMut<SqlxTasks<C>>,
