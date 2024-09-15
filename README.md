@@ -8,8 +8,9 @@ be performed and data entities to be spawned.
 ### Example
 
 ```rust
+use std::env;
 use bevy::prelude::*;
-use sqlx::FromRow;
+use sqlx::{FromRow, Sqlite, SqlitePool};
 use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 
 #[derive(Component, FromRow, Debug)]
@@ -28,9 +29,14 @@ impl SqlxPrimaryKey for MyTable {
 }
 
 fn main() {
+    let pool = bevy::tasks::block_on(async {
+        let url = env::var("DATABASE_URL").unwrap();
+        SqlitePool::connect(&url).await.unwrap()
+    });
+
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(SqlxPlugin::<MyTable>::default())
+        .add_plugins(SqlxPlugin::<Sqlite, MyTable>::default())
         .add_systems(Startup, insert)
         .add_systems(Update, query)
         .run();
@@ -38,10 +44,10 @@ fn main() {
 
 fn insert(
     mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<MyTable>>,
+    mut events: EventWriter<SqlxEvent<Sqlite, MyTable>>,
 ) {
     let sql = "INSERT INTO mytable(text) VALUES ('insert') RETURNING *";
-    SqlxEvent::<MyTable>::query(sql)
+    SqlxEvent::<Sqlite, MyTable>::query(sql)
         .send(&mut events)
         .trigger(&mut commands);
 }

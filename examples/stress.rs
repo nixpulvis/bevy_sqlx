@@ -1,6 +1,8 @@
+use std::env;
 use bevy::prelude::*;
 use bevy::{app::ScheduleRunnerPlugin, utils::Duration};
 use sqlx::FromRow;
+use sqlx::{Sqlite, SqlitePool};
 use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent, SqlxData};
 
 #[derive(Component, FromRow, Debug)]
@@ -25,14 +27,19 @@ fn main() {
     let tick_rate = Duration::from_millis(1);
     let runner = ScheduleRunnerPlugin::run_loop(tick_rate);
 
+    let pool = bevy::tasks::block_on(async {
+        let url = env::var("DATABASE_URL").unwrap();
+        SqlitePool::connect(&url).await.unwrap()
+    });
+
     App::new()
         .add_plugins(MinimalPlugins.set(runner))
-        .add_plugins(SqlxPlugin::<Foo>::default())
+        .add_plugins(SqlxPlugin::<Sqlite, Foo>::new(pool))
         .insert_resource(ExitTimer(Timer::new(tick_rate * 100, TimerMode::Once)))
         .add_systems(Startup, (delete, insert.after(delete)))
         .add_systems(Update, (select, update))
         .add_systems(Update, exit_timer)
-        .observe(|trigger: Trigger<SqlxEvent<Foo>>,
+        .observe(|trigger: Trigger<SqlxEvent<Sqlite, Foo>>,
                   foo_query: Query<(&Foo, &SqlxData)>| {
             dbg!(trigger.event());
             for (foo, data) in &foo_query {
@@ -44,27 +51,27 @@ fn main() {
 
 fn delete(
     mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Foo>>,
+    mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
 ) {
-    SqlxEvent::<Foo>::query("DELETE FROM foos")
+    SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos")
         .send(&mut events)
         .trigger(&mut commands);
 }
 
 fn insert(
     mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Foo>>,
+    mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
 ) {
-    SqlxEvent::<Foo>::query("INSERT INTO foos(text) VALUES ('insert') RETURNING *")
+    SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos(text) VALUES ('insert') RETURNING *")
         .send(&mut events)
         .trigger(&mut commands);
 }
 
 fn select(
     mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Foo>>,
+    mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
 ) {
-    SqlxEvent::<Foo>::query("SELECT * FROM foos")
+    SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM foos")
         .send(&mut events)
         .trigger(&mut commands);
 }
@@ -72,10 +79,10 @@ fn select(
 fn update(
     time: Res<Time>,
     mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Foo>>,
+    mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
 ) {
     let text = time.elapsed().as_millis().to_string();
-    SqlxEvent::<Foo>::query(&format!("UPDATE foos SET text = '{}'", text))
+    SqlxEvent::<Sqlite, Foo>::query(&format!("UPDATE foos SET text = '{}'", text))
         .send(&mut events)
         .trigger(&mut commands);
 }

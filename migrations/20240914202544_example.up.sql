@@ -1,7 +1,7 @@
 CREATE TABLE foos (
     id    INTEGER   PRIMARY KEY,
     text  TEXT      NOT NULL,
-    flag  BOOLEAN   NOT NULL DEFAULT 0
+    flag  BOOLEAN   NOT NULL DEFAULT false
 );
 
 CREATE TABLE bars (

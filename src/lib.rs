@@ -1,5 +1,3 @@
-#![feature(trivial_bounds)]
-use std::env;
 use std::marker::{PhantomData, Unpin};
 use bevy::prelude::*;
 use bevy::ecs::system::SystemState;
@@ -7,51 +5,72 @@ use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
 use bevy::tasks::futures_lite::future;
 use sqlx::{
     Error,
+    Executor,
+    IntoArguments,
+    Database,
+    Pool,
+    Row,
     FromRow,
-    sqlite::SqliteRow,
-    sqlite::SqlitePool,
 };
 
-pub trait SqlxComponent:
+pub trait SqlxComponent<R: Row>:
     SqlxPrimaryKey +
     Component +
-    for<'r> FromRow<'r, SqliteRow> +
+    for<'r> FromRow<'r, R> +
     Unpin
 {}
-impl<C> SqlxComponent for C
+impl<C, R> SqlxComponent<R> for C
 where
     C: SqlxPrimaryKey +
         Component +
-        for<'r> FromRow<'r, SqliteRow> +
-        Unpin
+        for<'r> FromRow<'r, R> +
+        Unpin,
+    R: Row
 {}
 
+pub trait SqlxConn<'c, DB: Database>: Executor<'c, Database = DB> {}
+
 #[derive(Resource, Debug)]
-pub struct SqlxDatabase {
-    pub pool: SqlitePool
+pub struct SqlxDatabase<DB: Database> {
+    pub pool: Pool<DB>
 }
 
 #[derive(Resource, Debug)]
-pub struct SqlxTasks<C: SqlxComponent>(pub Vec<(String, Task<Result<Vec<C>, Error>>)>);
+pub struct SqlxTasks<R: Row, C: SqlxComponent<R>> {
+    pub queries: Vec<(String, Task<Result<Vec<C>, Error>>)>,
+    _r: PhantomData<R>,
+}
 
+impl<R: Row, C: SqlxComponent<R>> Default for SqlxTasks<R, C> {
+    fn default() -> Self {
+        SqlxTasks {
+            queries: Vec::new(),
+            _r: PhantomData::<R>,
+        }
+    }
+}
 
 #[derive(Event, Debug)]
-pub struct SqlxEvent<C: SqlxComponent> {
+pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
     pub query: String,
+    // pub query: impl Fn(impl SqlxConn) -> SqlxComponent<DB::Row>,
+    _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
 
-impl<C: SqlxComponent> SqlxEvent<C> {
+impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C> {
     pub fn query(string: &str) -> Self {
         SqlxEvent {
             query: string.to_string(),
+            _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
     }
 
-    pub fn send(self, events: &mut EventWriter<SqlxEvent<C>>) -> Self {
+    pub fn send(self, events: &mut EventWriter<SqlxEvent<DB, C>>) -> Self {
         events.send(SqlxEvent {
             query: self.query.clone(),
+            _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         });
         self
@@ -60,6 +79,7 @@ impl<C: SqlxComponent> SqlxEvent<C> {
     pub fn trigger(self, commands: &mut Commands) -> Self {
         commands.trigger(SqlxEvent {
             query: self.query.clone(),
+            _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         });
         self
@@ -80,49 +100,53 @@ pub struct SqlxData {
     pub query: String,
 }
 
-pub struct SqlxPlugin<C: SqlxComponent> {
-    url: Option<String>,
+pub struct SqlxPlugin<DB: Database, C: SqlxComponent<DB::Row>> {
+    pool: Pool<DB>,
     _c: PhantomData<C>,
 }
 
-impl<C: SqlxComponent> Default for SqlxPlugin<C> {
-    fn default() -> Self {
+// impl<DB: Database, C: SqlxComponent<DB::Row>> Default for SqlxPlugin<DB, C> {
+//     fn default() -> Self {
+//         SqlxPlugin {
+//             url: None,
+//             _db: PhantomData,
+//             _c: PhantomData,
+//         }
+//     }
+// }
+
+impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C> {
+    pub fn new(pool: Pool<DB>) -> Self {
         SqlxPlugin {
-            url: None,
+            pool,
             _c: PhantomData,
         }
     }
 }
 
-impl<C: SqlxComponent> SqlxPlugin<C> {
-    pub fn url(string: &str) -> Self {
-        SqlxPlugin {
-            url: Some(string.to_string()),
-            _c: PhantomData,
-        }
-    }
-}
-
-impl<C: SqlxComponent> Plugin for SqlxPlugin<C> {
+impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> Plugin for SqlxPlugin<DB, C>
+where
+    for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
+    for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
+{
     fn build(&self, app: &mut App) {
-        let pool = bevy::tasks::block_on(async {
-            let url = self.url.clone()
-                .unwrap_or(env::var("DATABASE_URL").unwrap());
-            SqlitePool::connect(&url).await.unwrap()
-        });
-        app.insert_resource(SqlxDatabase { pool });
-        app.insert_resource(SqlxTasks::<C>(Vec::new()));
-        app.add_event::<SqlxEvent<C>>();
+        app.insert_resource(SqlxDatabase { pool: self.pool.clone() });
+        app.insert_resource(SqlxTasks::<DB::Row, C>::default());
+        app.add_event::<SqlxEvent<DB, C>>();
         app.register_type::<SqlxData>();
         app.add_systems(Update, (Self::tasks, Self::entities));
     }
 }
 
-impl<C: SqlxComponent> SqlxPlugin<C> {
+impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C>
+where
+    for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
+    for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
+{
     pub fn tasks(
-        database: Res<SqlxDatabase>,
-        mut tasks: ResMut<SqlxTasks<C>>,
-        mut events: EventReader<SqlxEvent<C>>,
+        database: Res<SqlxDatabase<DB>>,
+        mut tasks: ResMut<SqlxTasks<DB::Row, C>>,
+        mut events: EventReader<SqlxEvent<DB, C>>,
     ) {
         for event in events.read() {
             let task_pool = AsyncComputeTaskPool::get();
@@ -132,7 +156,7 @@ impl<C: SqlxComponent> SqlxPlugin<C> {
             let task = task_pool.spawn(async move {
                 sqlx::query_as(&q).fetch_all(&db).await
             });
-            tasks.0.push((query, task));
+            tasks.queries.push((query, task));
         }
     }
 
@@ -141,7 +165,7 @@ impl<C: SqlxComponent> SqlxPlugin<C> {
         params: &mut SystemState<(
             Query<(Entity, Ref<C>)>,
             Commands,
-            ResMut<SqlxTasks<C>>,
+            ResMut<SqlxTasks<DB::Row, C>>,
         )>,
     ) {
         let (mut query, mut commands, mut tasks) = params.get_mut(world);
@@ -155,7 +179,7 @@ impl<C: SqlxComponent> SqlxPlugin<C> {
         //     }
         // }
 
-        tasks.0.retain_mut(|(sql, task)| {
+        tasks.queries.retain_mut(|(sql, task)| {
             let status = block_on(future::poll_once(task));
             let retain = status.is_none();
             if let Some(result) = status {
@@ -215,8 +239,8 @@ fn the_one_test() {
 
     let mut app = App::new();
     app.add_plugins(SqlxPlugin::<Foo>::default());
-    app.world_mut().send_event(SqlxEvent::<Foo>::query("DELETE FROM foos"));
-    app.world_mut().send_event(SqlxEvent::<Foo>::query("INSERT INTO foos (text) VALUES ('test') RETURNING *"));
+    app.world_mut().send_event(SqlxEvent::<SqliteRow, Foo>::query("DELETE FROM foos"));
+    app.world_mut().send_event(SqlxEvent::<SqliteRow, Foo>::query("INSERT INTO foos (text) VALUES ('test') RETURNING *"));
 
     let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
 

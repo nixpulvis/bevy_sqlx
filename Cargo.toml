@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "*", default-features = false, features = ["multi_threaded"] }
-sqlx = { version = "*", features = ["runtime-async-std", "sqlite"] }
+sqlx = { version = "*", features = ["runtime-async-std"] }
 
 [dev-dependencies]
 rand = "*"
@@ -17,4 +17,12 @@ required-features = ["bevy/bevy_winit"]
 
 [[example]]
 name = "sqlite"
-required-features = ["bevy/bevy_winit"]
+required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
+
+[[example]]
+name = "postgres"
+required-features = ["sqlx/postgres", "bevy/bevy_winit"]
+
+[[example]]
+name = "stress"
+required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
