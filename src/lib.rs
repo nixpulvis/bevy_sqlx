@@ -1,6 +1,5 @@
 #![feature(trivial_bounds)]
 use std::env;
-use std::fmt::Debug;
 use std::marker::{PhantomData, Unpin};
 use bevy::prelude::*;
 use bevy::ecs::system::SystemState;
@@ -17,8 +16,6 @@ pub trait SqlxComponent:
     SqlxPrimaryKey +
     Component +
     for<'r> FromRow<'r, SqliteRow> +
-    Debug +
-    Clone +
     Unpin
 {}
 impl<C> SqlxComponent for C
@@ -26,8 +23,6 @@ where
     C: SqlxPrimaryKey +
         Component +
         for<'r> FromRow<'r, SqliteRow> +
-        Debug +
-        Clone +
         Unpin
 {}
 
@@ -36,11 +31,11 @@ pub struct SqlxDatabase {
     pub pool: SqlitePool
 }
 
-#[derive(Resource)]
+#[derive(Resource, Debug)]
 pub struct SqlxTasks<C: SqlxComponent>(pub Vec<(String, Task<Result<Vec<C>, Error>>)>);
 
 
-#[derive(Event, Debug, Clone)]
+#[derive(Event, Debug)]
 pub struct SqlxEvent<C: SqlxComponent> {
     pub query: String,
     _c: PhantomData<C>,
@@ -50,17 +45,23 @@ impl<C: SqlxComponent> SqlxEvent<C> {
     pub fn query(string: &str) -> Self {
         SqlxEvent {
             query: string.to_string(),
-            _c: PhantomData,
+            _c: PhantomData::<C>,
         }
     }
 
     pub fn send(self, events: &mut EventWriter<SqlxEvent<C>>) -> Self {
-        events.send(self.clone());
+        events.send(SqlxEvent {
+            query: self.query.clone(),
+            _c: PhantomData::<C>,
+        });
         self
     }
 
     pub fn trigger(self, commands: &mut Commands) -> Self {
-        commands.trigger(self.clone());
+        commands.trigger(SqlxEvent {
+            query: self.query.clone(),
+            _c: PhantomData::<C>,
+        });
         self
     }
 

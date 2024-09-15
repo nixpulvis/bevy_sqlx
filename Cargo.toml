@@ -9,3 +9,12 @@ sqlx = { version = "*", features = ["runtime-async-std", "sqlite"] }
 
 [dev-dependencies]
 rand = "*"
+bevy-inspector-egui = "*"
+
+[[example]]
+name = "minimal"
+required-features = ["bevy/bevy_winit"]
+
+[[example]]
+name = "sqlite"
+required-features = ["bevy/bevy_winit"]
