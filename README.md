@@ -1,5 +1,6 @@
 # Bevy SQLx
 -----
+![Bevy SQLx Demo](./bevy_sqlx.gif)
 
 Bevy SQLx is a database plugin for Bevy's ECS which allows for SQL queries to
 be performed and data entities to be spawned.
