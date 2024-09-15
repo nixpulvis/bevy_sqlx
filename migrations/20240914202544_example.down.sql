@@ -1,0 +1,2 @@
+DROP TABLE foos;
+DROP TABLE bars;
