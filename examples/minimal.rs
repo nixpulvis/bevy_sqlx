@@ -1,16 +1,16 @@
 use bevy::prelude::*;
-use bevy::{app::ScheduleRunnerPlugin, utils::Duration};
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use sqlx::FromRow;
-use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent, SqlxData};
+use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 
-#[derive(Component, FromRow, Clone, Debug)]
-struct Foo {
+#[derive(Component, FromRow, Debug)]
+struct MyTable {
     id: u32,
-    text: String,
     flag: bool,
+    text: String,
 }
 
-impl SqlxPrimaryKey for Foo {
+impl SqlxPrimaryKey for MyTable {
     type Column = u32;
 
     fn id(&self) -> Self::Column {
@@ -18,75 +18,28 @@ impl SqlxPrimaryKey for Foo {
     }
 }
 
-#[derive(Resource)]
-struct ExitTimer(Timer);
-
 fn main() {
-    let tick_rate = Duration::from_millis(1);
-    let runner = ScheduleRunnerPlugin::run_loop(tick_rate);
-
     App::new()
-        .add_plugins(MinimalPlugins.set(runner))
-        .add_plugins(SqlxPlugin::<Foo>::default())
-        .insert_resource(ExitTimer(Timer::new(tick_rate * 100, TimerMode::Once)))
-        .add_systems(Startup, (delete, insert.after(delete)))
-        .add_systems(Update, (select, update))
-        .add_systems(Update, exit_timer)
-        .observe(|trigger: Trigger<SqlxEvent<Foo>>,
-                  foo_query: Query<(&Foo, &SqlxData)>| {
-            dbg!(trigger.event());
-            for (foo, data) in &foo_query {
-                dbg!((&data, &foo));
-            }
-        })
+        .add_plugins(DefaultPlugins)
+        .add_plugins(WorldInspectorPlugin::new())
+        .add_plugins(SqlxPlugin::<MyTable>::default())
+        .add_systems(Startup, insert)
+        .add_systems(Update, query)
         .run();
-}
-
-fn delete(
-    mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Foo>>,
-) {
-    SqlxEvent::<Foo>::query("DELETE FROM foos")
-        .send(&mut events)
-        .trigger(&mut commands);
 }
 
 fn insert(
     mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Foo>>,
+    mut events: EventWriter<SqlxEvent<MyTable>>,
 ) {
-    SqlxEvent::<Foo>::query("INSERT INTO foos(text) VALUES ('insert') RETURNING *")
+    let sql = "INSERT INTO foos(text) VALUES ('insert') RETURNING *";
+    SqlxEvent::<MyTable>::query(sql)
         .send(&mut events)
         .trigger(&mut commands);
 }
 
-fn select(
-    mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Foo>>,
-) {
-    SqlxEvent::<Foo>::query("SELECT * FROM foos")
-        .send(&mut events)
-        .trigger(&mut commands);
-}
-
-fn update(
-    time: Res<Time>,
-    mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Foo>>,
-) {
-    let text = time.elapsed().as_millis().to_string();
-    SqlxEvent::<Foo>::query(&format!("UPDATE foos SET text = '{}'", text))
-        .send(&mut events)
-        .trigger(&mut commands);
-}
-
-fn exit_timer(
-    time: Res<Time>,
-    mut timer: ResMut<ExitTimer>,
-    mut exit: EventWriter<AppExit>,
-) {
-    timer.0.tick(time.delta());
-    if timer.0.finished() {
-        exit.send(AppExit::Success);
+fn query(my_tables: Query<&MyTable>) {
+    for my_table in &my_tables {
+        dbg!(my_table);
     }
 }

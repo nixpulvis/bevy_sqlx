@@ -1,13 +1,22 @@
 use rand::prelude::*;
 use bevy::prelude::*;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use sqlx::FromRow;
-use bevy_sqlx::{SqlxPlugin, SqlxEvent};
+use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 
 #[derive(Component, FromRow, Debug, Default, Clone)]
 struct Foo {
     id: u32,
     text: String,
     flag: bool,
+}
+
+impl SqlxPrimaryKey for Foo {
+    type Column = u32;
+
+    fn id(&self) -> Self::Column {
+        self.id
+    }
 }
 
 pub struct FooPlugin;
@@ -51,7 +60,7 @@ impl FooPlugin {
                 .collect();
 
             SqlxEvent::<Foo>::query(
-                    &format!("INSERT INTO foos(text) VALUES ('{}')", text))
+                    &format!("INSERT INTO foos(text) VALUES ('{}') RETURNING *", text))
                 .send(&mut events)
                 .trigger(&mut commands);
             // TODO: Should use bind.
@@ -73,9 +82,19 @@ impl FooPlugin {
 
 #[derive(Component, FromRow, Debug, Default, Clone)]
 struct Bar {
+    id: u32,
     foo_id: u32,
     optional: Option<String>,
 }
+
+impl SqlxPrimaryKey for Bar {
+    type Column = u32;
+
+    fn id(&self) -> Self::Column {
+        self.id
+    }
+}
+
 
 pub struct BarPlugin;
 
@@ -131,6 +150,7 @@ impl BarPlugin {
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(WorldInspectorPlugin::new())
         .add_plugins(FooPlugin)
         .add_plugins(BarPlugin)
         .add_systems(Update, query_spawned)
