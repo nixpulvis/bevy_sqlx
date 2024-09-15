@@ -195,3 +195,40 @@ impl<C: SqlxComponent> SqlxPlugin<C> {
         params.apply(world);
     }
 }
+
+
+#[test]
+fn the_one_test() {
+    use bevy::tasks::TaskPool;
+
+    #[derive(Component, FromRow, Debug)]
+    struct Foo {
+        id: u32,
+        text: String,
+    }
+    impl SqlxPrimaryKey for Foo {
+        type Column = u32;
+        fn id(&self) -> Self::Column { self.id }
+    }
+
+    AsyncComputeTaskPool::get_or_init(|| TaskPool::new());
+
+    let mut app = App::new();
+    app.add_plugins(SqlxPlugin::<Foo>::default());
+    app.world_mut().send_event(SqlxEvent::<Foo>::query("DELETE FROM foos"));
+    app.world_mut().send_event(SqlxEvent::<Foo>::query("INSERT INTO foos (text) VALUES ('test') RETURNING *"));
+
+    let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
+
+    let mut tries = 0;
+    let mut len = system_state.get(app.world()).iter().len();
+    while !(len > 0) && tries < 1000 {
+        app.update();
+        len = system_state.get(app.world()).iter().len();
+        tries += 1;
+    }
+
+    let query = system_state.get(app.world());
+    assert_eq!(1, query.single().id);
+    assert_eq!("test", query.single().text);
+}
