@@ -150,25 +150,22 @@ impl<C: SqlxComponent> SqlxPlugin<C> {
             if let Some(result) = status {
                 match result {
                     Ok(task_components) => {
-
                         // TODO: Look into world.spawn_batch after taking set disjunction of ids.
-
                         for task_component in task_components {
-                            let mut spawn = true;
-
                             // Check if the task's component is already spawned.
+                            let mut existing_entity = None;
                             for (entity, spawned_component) in &mut query {
                                 if task_component.id() == spawned_component.id() {
-                                    commands.entity(entity)
-                                            .remove::<C>()
-                                            .insert(task_component.clone())
-                                            .insert(SqlxData { query: sql.clone() });
-                                    spawn = false;
+                                    existing_entity = Some(entity);
                                     break;
                                 }
                             }
 
-                            if spawn {
+                            if let Some(entity) = existing_entity {
+                                commands.entity(entity)
+                                        .insert(task_component)
+                                        .insert(SqlxData { query: sql.clone() });
+                            } else {
                                 commands.spawn((
                                     task_component,
                                     SqlxData { query: sql.clone() }

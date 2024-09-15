@@ -22,20 +22,22 @@ impl SqlxPrimaryKey for Foo {
 struct ExitTimer(Timer);
 
 fn main() {
-    let tick_rate = Duration::from_millis(10);
+    let tick_rate = Duration::from_millis(1);
     let runner = ScheduleRunnerPlugin::run_loop(tick_rate);
 
     App::new()
         .add_plugins(MinimalPlugins.set(runner))
         .add_plugins(SqlxPlugin::<Foo>::default())
-        .insert_resource(ExitTimer(Timer::new(tick_rate * 10, TimerMode::Once)))
+        .insert_resource(ExitTimer(Timer::new(tick_rate * 100, TimerMode::Once)))
         .add_systems(Startup, (delete, insert.after(delete)))
         .add_systems(Update, (select, update))
         .add_systems(Update, exit_timer)
         .observe(|trigger: Trigger<SqlxEvent<Foo>>,
-                  foo_query: Query<&Foo>| {
+                  foo_query: Query<(&Foo, &SqlxData)>| {
             dbg!(trigger.event());
-            for foo in &foo_query { dbg!(&foo); }
+            for (foo, data) in &foo_query {
+                dbg!((&data, &foo));
+            }
         })
         .run();
 }
