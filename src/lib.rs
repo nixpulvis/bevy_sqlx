@@ -147,7 +147,7 @@ impl<C: SqlxComponent> SqlxPlugin<C> {
         let (mut query, mut commands, mut tasks) = params.get_mut(world);
 
         // for (entity, component) in &mut query {
-        //     // TODO: Send Encoded UPDATE
+        //     // TODO: Send Encoded UPDATE or callback function?
         //     // TODO: Need a dirty bit to check so we don't send just
         //     //       received updated entities.
         //     if component.is_changed() && !component.is_added() {
