@@ -20,11 +20,9 @@ fn main() {
     App::new()
         .add_plugins(MinimalPlugins.set(runner))
         .add_plugins(SqlxPlugin::<Foo>::default())
-        .insert_resource(ExitTimer(Timer::new(tick_rate * 5, TimerMode::Once)))
-        .add_systems(Startup,
-            (delete, insert).after(SqlxPlugin::<Foo>::fetch)
-                            .after(SqlxPlugin::<Foo>::spawn))
-        .add_systems(Update, select.after(SqlxPlugin::<Foo>::spawn))
+        .insert_resource(ExitTimer(Timer::new(tick_rate * 2, TimerMode::Once)))
+        .add_systems(Startup, (delete, insert.after(delete)))
+        .add_systems(Update, select)
         .add_systems(Update, exit_timer)
         .run();
 }
