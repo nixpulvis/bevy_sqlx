@@ -106,7 +106,17 @@ pub struct SqlxPlugin<DB: Database, C: SqlxComponent<DB::Row>> {
 }
 
 impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C> {
-    pub fn new(pool: Pool<DB>) -> Self {
+    pub fn pool(pool: Pool<DB>) -> Self {
+        SqlxPlugin {
+            pool,
+            _c: PhantomData,
+        }
+    }
+
+    pub fn url(url: &str) -> Self {
+        let pool = bevy::tasks::block_on(async {
+            Pool::connect(url).await.unwrap()
+        });
         SqlxPlugin {
             pool,
             _c: PhantomData,
@@ -214,7 +224,7 @@ where
 fn the_one_test() {
     use std::env;
     use bevy::tasks::TaskPool;
-    use sqlx::{Sqlite, SqlitePool};
+    use sqlx::Sqlite;
 
     #[derive(Component, FromRow, Debug)]
     struct Foo {
@@ -228,13 +238,9 @@ fn the_one_test() {
 
     AsyncComputeTaskPool::get_or_init(|| TaskPool::new());
 
-    let pool = bevy::tasks::block_on(async {
-        let url = env::var("DATABASE_URL").unwrap();
-        SqlitePool::connect(&url).await.unwrap()
-    });
-
+    let url = env::var("DATABASE_URL").unwrap();
     let mut app = App::new();
-    app.add_plugins(SqlxPlugin::<Sqlite, Foo>::new(pool));
+    app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(&url));
     let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
     app.world_mut().send_event(delete);
     let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES ('test') RETURNING *");

@@ -25,12 +25,8 @@ pub struct FooPlugin;
 
 impl Plugin for FooPlugin {
     fn build(&self, app: &mut App) {
-        let pool = bevy::tasks::block_on(async {
-            let url = env::var("DATABASE_URL").unwrap();
-            SqlitePool::connect(&url).await.unwrap()
-        });
-
-        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::new(pool));
+        let url = env::var("DATABASE_URL").unwrap();
+        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(&url));
         app.add_systems(Update, Self::send_foo_events);
         app.observe(|trigger: Trigger<SqlxEvent<Sqlite, Foo>>,
                   foo_query: Query<&Foo>| {
@@ -112,7 +108,7 @@ impl Plugin for BarPlugin {
             SqlitePool::connect(&url).await.unwrap()
         });
 
-        app.add_plugins(SqlxPlugin::<Sqlite, Bar>::new(pool));
+        app.add_plugins(SqlxPlugin::<Sqlite, Bar>::pool(pool));
         app.add_systems(Update, Self::send_bar_events);
         app.observe(|trigger: Trigger<SqlxEvent<Sqlite, Bar>>,
                   bar_query: Query<&Bar>| {

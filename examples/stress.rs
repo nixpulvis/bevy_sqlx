@@ -27,14 +27,10 @@ fn main() {
     let tick_rate = Duration::from_millis(1);
     let runner = ScheduleRunnerPlugin::run_loop(tick_rate);
 
-    let pool = bevy::tasks::block_on(async {
-        let url = env::var("DATABASE_URL").unwrap();
-        SqlitePool::connect(&url).await.unwrap()
-    });
-
+    let url = env::var("DATABASE_URL").unwrap();
     App::new()
         .add_plugins(MinimalPlugins.set(runner))
-        .add_plugins(SqlxPlugin::<Sqlite, Foo>::new(pool))
+        .add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url))
         .insert_resource(ExitTimer(Timer::new(tick_rate * 100, TimerMode::Once)))
         .add_systems(Startup, (delete, insert.after(delete)))
         .add_systems(Update, (select, update))

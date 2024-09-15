@@ -27,14 +27,10 @@ impl SqlxPrimaryKey for Foo {
 }
 
 fn main() {
-    let pool = bevy::tasks::block_on(async {
-        let url = env::var("DATABASE_URL").unwrap();
-        PgPool::connect(&url).await.unwrap()
-    });
-
+    let url = env::var("DATABASE_URL").unwrap();
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(SqlxPlugin::<Postgres, Foo>::new(pool))
+        .add_plugins(SqlxPlugin::<Postgres, Foo>::url(&url))
         .add_systems(Startup, (delete, insert.after(delete)))
         .add_systems(Update, query)
         .run();
