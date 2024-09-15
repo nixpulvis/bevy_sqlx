@@ -56,6 +56,8 @@ fn query(mut my_tables: Query<&MyTable>) {
 ### Usage
 
 ```sh
+DATABASE_URL="sqlite:db/sqlite.db" cargo sqlx database setup
+DATABASE_URL="sqlite:db/sqlite.db" cargo test
 DATABASE_URL="sqlite:db/sqlite.db" \
-cargo run --example sqlite --features bevy/bevy_winit,bevy/wayland
+cargo run --example minimal --features bevy/bevy_winit,bevy/wayland
 ```
