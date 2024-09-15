@@ -1050,6 +1050,7 @@ name = "bevy_sqlx"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "rand",
  "sqlx",
 ]
 

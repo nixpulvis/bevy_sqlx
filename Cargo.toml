@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 bevy = "*"
 sqlx = { version = "*", features = ["runtime-async-std", "sqlite"] }
+
+[dev-dependencies]
+rand = "*"
