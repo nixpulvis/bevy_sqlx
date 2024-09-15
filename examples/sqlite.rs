@@ -10,113 +10,149 @@ struct Foo {
     flag: bool,
 }
 
+pub struct FooPlugin;
+
+impl Plugin for FooPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins(SqlxPlugin::<Foo>::default());
+        app.add_systems(Update, Self::send_foo_events);
+        app.observe(|trigger: Trigger<SqlxEvent<Foo>>,
+                  foo_query: Query<&Foo>| {
+            dbg!(trigger.event(), &foo_query);
+            for foo in &mut foo_query.iter() {
+                dbg!(&foo);
+            }
+        });
+    }
+}
+
+impl FooPlugin {
+    fn send_foo_events(
+        foos_query: Query<(Entity, &Foo)>,
+        keys: Res<ButtonInput<KeyCode>>,
+        mut commands: Commands,
+        mut events: EventWriter<SqlxEvent<Foo>>,
+    ) {
+        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyD) {
+            SqlxEvent::<Foo>::query("DELETE FROM foos")
+                .send(&mut events)
+                .trigger(&mut commands);
+            for (entity, foo) in foos_query.iter() {
+                dbg!(&foo);
+                commands.entity(entity).despawn_recursive();
+            }
+        }
+
+        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyI) {
+            let text: String = rand::thread_rng()
+                .sample_iter(rand::distributions::Alphanumeric)
+                .take(10)
+                .map(char::from)
+                .collect();
+
+            SqlxEvent::<Foo>::query(
+                    &format!("INSERT INTO foos(text) VALUES ('{}')", text))
+                .send(&mut events)
+                .trigger(&mut commands);
+            // TODO: Should use bind.
+            // let sql = r#"
+            //     INSERT INTO foos(id, text, flag)
+            //     VALUES (8, '?', 0)
+            // "#;
+            // events.send(SqlxEvent::<Foo>::query(&sql).bind(text));
+        }
+
+        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyS) {
+            SqlxEvent::<Foo>::query("SELECT id, text, flag FROM foos")
+                .send(&mut events)
+                .trigger(&mut commands);
+        }
+    }
+}
+
+
 #[derive(Component, FromRow, Debug, Default, Clone)]
 struct Bar {
     foo_id: u32,
     optional: Option<String>,
 }
 
+pub struct BarPlugin;
+
+impl Plugin for BarPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins(SqlxPlugin::<Bar>::default());
+        app.add_systems(Update, Self::send_bar_events);
+        app.observe(|trigger: Trigger<SqlxEvent<Bar>>,
+                  bar_query: Query<&Bar>| {
+            dbg!(trigger.event(), bar_query);
+        });
+    }
+}
+
+impl BarPlugin {
+    fn send_bar_events(
+        bars_query: Query<(Entity, &Bar)>,
+        foos_query: Query<&Foo>,
+        keys: Res<ButtonInput<KeyCode>>,
+        mut commands: Commands,
+        mut events: EventWriter<SqlxEvent<Bar>>,
+    ) {
+        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyD) {
+            SqlxEvent::<Bar>::query("DELETE FROM bars")
+                .send(&mut events)
+                .trigger(&mut commands);
+            for (entity, bar) in bars_query.iter() {
+                dbg!(&bar);
+                commands.entity(entity).despawn_recursive();
+            }
+        }
+
+        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyI) {
+            // Choose a random Foo to be associated with.
+            if let Some(foo) = foos_query.iter().choose(&mut rand::thread_rng()) {
+                SqlxEvent::<Bar>::query(
+                    &format!("INSERT INTO bars(foo_id) VALUES ({})", foo.id))
+                    .send(&mut events)
+                    .trigger(&mut commands);
+            } else {
+                dbg!("No Foo to choose from.");
+            }
+        }
+
+        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyS) {
+            SqlxEvent::<Bar>::query("SELECT * FROM bars")
+                .send(&mut events)
+                .trigger(&mut commands);
+        }
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(SqlxPlugin::<Foo>::default())
-        .add_plugins(SqlxPlugin::<Bar>::default())
-        .add_systems(Update, send_foo_events)
-        .add_systems(Update, send_bar_events)
+        .add_plugins(FooPlugin)
+        .add_plugins(BarPlugin)
         .add_systems(Update, query_spawned)
-        .observe(|trigger: Trigger<SqlxEvent<Bar>>,
-                  bar_query: Query<&Bar>| {
-            dbg!(trigger.event(), bar_query);
-        })
-        .observe(|trigger: Trigger<SqlxEvent<Foo>>,
-                  foo_query: Query<&Foo>| {
-            dbg!(trigger.event(), foo_query);
-        })
         .run();
 }
 
-fn send_bar_events(
-    foos_query: Query<&Foo>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Bar>>,
-) {
-    if keys.pressed(KeyCode::KeyB) && keys.pressed(KeyCode::KeyD) {
-        SqlxEvent::<Bar>::query("DELETE FROM bars")
-            .send(&mut events)
-            .trigger(&mut commands);
-    }
-
-    if keys.pressed(KeyCode::KeyB) && keys.pressed(KeyCode::KeyI) {
-        if let Some(foo) = foos_query.iter().choose(&mut rand::thread_rng()) {
-            SqlxEvent::<Bar>::query(
-                &format!("INSERT INTO bars(foo_id) VALUES ({})", foo.id))
-                .send(&mut events)
-                .trigger(&mut commands);
-        } else {
-            dbg!("No Foo to choose from.");
-        }
-    }
-
-    if keys.pressed(KeyCode::KeyB) && keys.pressed(KeyCode::KeyS) {
-        SqlxEvent::<Bar>::query("SELECT * FROM bars")
-            .send(&mut events)
-            .trigger(&mut commands);
-    }
-}
-
-fn send_foo_events(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Foo>>,
-) {
-    if keys.pressed(KeyCode::KeyF) && keys.pressed(KeyCode::KeyD) {
-        SqlxEvent::<Foo>::query("DELETE FROM foos")
-            .send(&mut events)
-            .trigger(&mut commands);
-    }
-
-    if keys.pressed(KeyCode::KeyF) && keys.pressed(KeyCode::KeyI) {
-        let text: String = rand::thread_rng()
-            .sample_iter(rand::distributions::Alphanumeric)
-            .take(10)
-            .map(char::from)
-            .collect();
-
-        SqlxEvent::<Foo>::query(
-                &format!("INSERT INTO foos(text) VALUES ('{}')", text))
-            .send(&mut events)
-            .trigger(&mut commands);
-        // TODO: Should use bind.
-        // let sql = r#"
-        //     INSERT INTO foos(id, text, flag)
-        //     VALUES (8, '?', 0)
-        // "#;
-        // events.send(SqlxEvent::<Foo>::query(&sql).bind(text));
-    }
-
-    if keys.pressed(KeyCode::KeyF) && keys.pressed(KeyCode::KeyS) {
-        SqlxEvent::<Foo>::query("SELECT id, text, flag FROM foos")
-            .send(&mut events)
-            .trigger(&mut commands);
-    }
-}
-
-// TODO: Find a better way to show the loaded data.
 fn query_spawned(
     keys: Res<ButtonInput<KeyCode>>,
     mut foo_query: Query<(Entity, &Foo)>,
     mut bar_query: Query<(Entity, &Bar)>,
 ) {
-    if keys.pressed(KeyCode::KeyF) && keys.pressed(KeyCode::KeyQ) {
-        for (_entity, foo) in &mut foo_query {
-            dbg!(foo);
-        }
+    if keys.just_pressed(KeyCode::KeyF) &&
+       keys.just_pressed(KeyCode::KeyQ)
+    {
+        dbg!(&foo_query);
+        for foo in &mut foo_query { dbg!(&foo); }
     }
 
-    if keys.pressed(KeyCode::KeyB) && keys.pressed(KeyCode::KeyQ) {
-        for (_entity, bar) in &mut bar_query {
-            dbg!(bar);
-        }
+    if keys.just_pressed(KeyCode::KeyB) &&
+       keys.just_pressed(KeyCode::KeyQ)
+    {
+        dbg!(&bar_query);
+        for bar in &mut bar_query { dbg!(&bar); }
     }
 }
