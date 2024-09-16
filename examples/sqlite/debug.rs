@@ -28,7 +28,7 @@ impl Plugin for FooPlugin {
         app.add_systems(Update, Self::send_foo_events);
         app.observe(|trigger: Trigger<SqlxEvent<Sqlite, Foo>>,
                   foo_query: Query<&Foo>| {
-            dbg!({ "observe"; (trigger.event(), &foo_query.iter().len()) });
+            dbg!({ "observe"; &foo_query.iter().len() });
             for foo in &mut foo_query.iter() {
                 dbg!({ "observe"; &foo });
             }
@@ -101,12 +101,12 @@ pub struct BarPlugin;
 
 impl Plugin for BarPlugin {
     fn build(&self, app: &mut App) {
-        let url = env::var("DATABASE_URL").unwrap();
+        let url = "sqlite:db/sqlite.db";
         app.add_plugins(SqlxPlugin::<Sqlite, Bar>::url(&url));
         app.add_systems(Update, Self::send_bar_events);
         app.observe(|trigger: Trigger<SqlxEvent<Sqlite, Bar>>,
                   bar_query: Query<&Bar>| {
-            dbg!(trigger.event(), bar_query);
+            dbg!(bar_query);
         });
     }
 }

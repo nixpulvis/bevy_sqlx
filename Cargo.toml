@@ -17,8 +17,8 @@ path = "examples/sqlite/minimal.rs"
 required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
 
 [[example]]
-name = "sqlite-full"
-path = "examples/sqlite/full.rs"
+name = "sqlite-debug"
+path = "examples/sqlite/debug.rs"
 required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
 
 [[example]]
