@@ -42,7 +42,7 @@ impl<R: Row, C: SqlxComponent<R>> Default for SqlxTasks<R, C> {
 
 #[derive(Event)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
-    callback: Arc<dyn Fn(Pool<DB>) -> Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>> + Send + Sync>,
+    call: Arc<dyn Fn(Pool<DB>) -> Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>> + Send + Sync>,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
@@ -61,13 +61,27 @@ where
             }) as Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>>
         };
         SqlxEvent {
-            callback: Arc::new(func),
+            call: Arc::new(func),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
     }
 
-    pub fn callback(func: impl Fn(Pool<DB>) ->
+    pub fn call<F, T>(func: F) -> Self
+    where
+        F: Fn(Pool<DB>) -> Result<Vec<C>, Error> + Clone + Send + Sync + 'static,
+        T: Future<Output = Result<Vec<C>, Error>> + Send + 'static,
+    {
+        Self::call_private(move |db: Pool<DB>| {
+            Box::pin({
+                let func = func.clone();
+                async move { func(db) }
+            })
+        })
+    }
+
+    // TODO: Build into `call`
+    fn call_private(func: impl Fn(Pool<DB>) ->
         Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>>
             + Send + Sync + 'static)
         -> Self
@@ -76,7 +90,7 @@ where
             func(db)
         };
         SqlxEvent {
-            callback: Arc::new(func),
+            call: Arc::new(func),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
@@ -84,7 +98,7 @@ where
 
     pub fn send(self, events: &mut EventWriter<SqlxEvent<DB, C>>) -> Self {
         events.send(SqlxEvent {
-            callback: self.callback.clone(),
+            call: self.call.clone(),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         });
@@ -93,7 +107,7 @@ where
 
     pub fn trigger(self, commands: &mut Commands) -> Self {
         commands.trigger(SqlxEvent {
-            callback: self.callback.clone(),
+            call: self.call.clone(),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         });
@@ -160,7 +174,7 @@ where
         let task_pool = AsyncComputeTaskPool::get();
         for event in events.read() {
             let db = database.pool.clone();
-            let future = (event.callback)(db);
+            let future = (event.call)(db);
             let task = task_pool.spawn(async move { future.await });
             tasks.components.push(task);
         }
@@ -292,18 +306,21 @@ mod tests {
         //     }) as Pin<Box<dyn Future<Output = Result<Vec<Foo>, Error>> + Send>>
         // };
         // let insert = SqlxEvent {
-        //     callback: Arc::new(func),
+        //     call: Arc::new(func),
         //     _db: PhantomData::<Sqlite>,
         //     _c: PhantomData::<Foo>,
         // };
-        let insert = SqlxEvent::<Sqlite, Foo>::callback(move |db: Pool<Sqlite>| {
-            Box::pin(async move {
-                sqlx::query_as("INSERT INTO foos (text) VALUES ('test') RETURNING *")
-                    .fetch_all(&db).await
-            })
-        });
-
-        app.world_mut().send_event(insert);
+        // let insert = SqlxEvent::<Sqlite, Foo>::call(move |db: Pool<Sqlite>| {
+        //     Box::pin(async move {
+        //         sqlx::query_as("INSERT INTO foos (text) VALUES ('test') RETURNING *")
+        //             .fetch_all(&db).await
+        //     })
+        // });
+        // let insert = SqlxEvent::<Sqlite, Foo>::call(async move |db| {
+        //     sqlx::query_as("INSERT INTO foos (text) VALUES ('test') RETURNING *")
+        //         .fetch_all(&db).await
+        // });
+        // app.world_mut().send_event(insert);
 
         let select = SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM foos");
         app.world_mut().send_event(select);
