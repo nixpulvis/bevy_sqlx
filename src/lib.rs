@@ -1,4 +1,3 @@
-#![feature(async_closure)]
 use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::future;
@@ -54,43 +53,23 @@ where
 {
     pub fn query(string: &str) -> Self {
         let string: Arc<str> = string.into();
-        let func = move |db: Pool<DB>| {
-            let string = string.clone();
-            Box::pin(async move {
-                sqlx::query_as(&string).fetch_all(&db).await
-            }) as Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>>
-        };
-        SqlxEvent {
-            call: Arc::new(func),
-            _db: PhantomData::<DB>,
-            _c: PhantomData::<C>,
-        }
+        Self::call(move |db| {
+            let s = string.clone();
+            async move {
+                sqlx::query_as(&s).fetch_all(&db).await
+            }
+        })
     }
 
     pub fn call<F, T>(func: F) -> Self
     where
-        F: Fn(Pool<DB>) -> Result<Vec<C>, Error> + Clone + Send + Sync + 'static,
+        F: Fn(Pool<DB>) -> T + Send + Sync + 'static,
         T: Future<Output = Result<Vec<C>, Error>> + Send + 'static,
     {
-        Self::call_private(move |db: Pool<DB>| {
-            Box::pin({
-                let func = func.clone();
-                async move { func(db) }
-            })
-        })
-    }
-
-    // TODO: Build into `call`
-    fn call_private(func: impl Fn(Pool<DB>) ->
-        Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>>
-            + Send + Sync + 'static)
-        -> Self
-    {
-        let func = move |db: Pool<DB>| {
-            func(db)
-        };
         SqlxEvent {
-            call: Arc::new(func),
+            call: Arc::new(move |db: Pool<DB>| {
+                Box::pin(func(db))
+            }),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
@@ -275,9 +254,6 @@ mod tests {
         let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES ('test') RETURNING *");
         app.world_mut().send_event(insert);
 
-        let select = SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM foos");
-        app.world_mut().send_event(select);
-
         let mut tries = 0;
         let mut len = system_state.get(app.world()).iter().len();
         while !(len > 0) && tries < 1000 {
@@ -287,6 +263,7 @@ mod tests {
         }
 
         let query = system_state.get(app.world());
+        assert_eq!(1, query.iter().len());
         assert_eq!(1, query.single().id);
         assert_eq!("test", query.single().text);
     }
@@ -299,31 +276,19 @@ mod tests {
         let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
         app.world_mut().send_event(delete);
 
-        // let func = move |db: Pool<Sqlite>| {
-        //     Box::pin(async move {
-        //         sqlx::query_as("INSERT INTO foos (text) VALUES ('test') RETURNING *")
-        //             .fetch_all(&db).await
-        //     }) as Pin<Box<dyn Future<Output = Result<Vec<Foo>, Error>> + Send>>
-        // };
-        // let insert = SqlxEvent {
-        //     call: Arc::new(func),
-        //     _db: PhantomData::<Sqlite>,
-        //     _c: PhantomData::<Foo>,
-        // };
-        // let insert = SqlxEvent::<Sqlite, Foo>::call(move |db: Pool<Sqlite>| {
-        //     Box::pin(async move {
-        //         sqlx::query_as("INSERT INTO foos (text) VALUES ('test') RETURNING *")
-        //             .fetch_all(&db).await
-        //     })
-        // });
-        // let insert = SqlxEvent::<Sqlite, Foo>::call(async move |db| {
-        //     sqlx::query_as("INSERT INTO foos (text) VALUES ('test') RETURNING *")
-        //         .fetch_all(&db).await
-        // });
-        // app.world_mut().send_event(insert);
-
-        let select = SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM foos");
-        app.world_mut().send_event(select);
+        let insert = SqlxEvent::<Sqlite, Foo>::call(move |db| {
+            async move {
+                let text: String = rand::thread_rng()
+                    .sample_iter(rand::distributions::Alphanumeric)
+                    .take(10)
+                    .map(char::from)
+                    .collect();
+                sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
+                    .bind(text)
+                    .fetch_all(&db).await
+            }
+        });
+        app.world_mut().send_event(insert);
 
         let mut tries = 0;
         let mut len = system_state.get(app.world()).iter().len();
@@ -334,14 +299,7 @@ mod tests {
         }
 
         let query = system_state.get(app.world());
+        assert_eq!(1, query.iter().len());
         assert_eq!(1, query.single().id);
-        assert_eq!("test", query.single().text);
     }
-
-
-        // let text: String = rand::thread_rng()
-        //     .sample_iter(rand::distributions::Alphanumeric)
-        //     .take(10)
-        //     .map(char::from)
-        //     .collect();
 }
