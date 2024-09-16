@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::{app::ScheduleRunnerPlugin, utils::Duration};
 use sqlx::{FromRow, Sqlite};
-use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent, SqlxData};
+use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 
 #[derive(Component, FromRow, Debug)]
 struct Foo {
@@ -34,9 +34,9 @@ fn main() {
         .add_systems(Update, (select, update))
         .add_systems(Update, exit_timer)
         .observe(|trigger: Trigger<SqlxEvent<Sqlite, Foo>>,
-                  foo_query: Query<(&Foo, &SqlxData)>| {
-            for (foo, data) in &foo_query {
-                dbg!((&data, &foo));
+                  foo_query: Query<&Foo>| {
+            for foo in &foo_query {
+                dbg!(&foo);
             }
         })
         .run();

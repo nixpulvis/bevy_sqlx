@@ -39,22 +39,18 @@ pub struct SqlxDatabase<DB: Database> {
 
 #[derive(Resource, Debug)]
 pub struct SqlxTasks<R: Row, C: SqlxComponent<R>> {
-    pub queries: Vec<(String, Task<Result<Vec<C>, Error>>)>,
+    pub components: Vec<Task<Result<Vec<C>, Error>>>,
     _r: PhantomData<R>,
 }
 
 impl<R: Row, C: SqlxComponent<R>> Default for SqlxTasks<R, C> {
     fn default() -> Self {
         SqlxTasks {
-            queries: Vec::new(),
+            components: Vec::new(),
             _r: PhantomData::<R>,
         }
     }
 }
-
-// type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + Sync + 'a>>;
-
-
 
 #[derive(Event)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
@@ -69,10 +65,12 @@ where
     for<'a> <DB as sqlx::Database>::Arguments<'a>: IntoArguments<'a, DB>,
 {
     pub fn query(string: &str) -> Self {
+            dbg!("HIT");
         let string: String = string.to_string();
         let func = move |db: Pool<DB>| {
+            dbg!("HIT");
             Box::new(async move {
-                sqlx::query_as(&string.clone())
+                sqlx::query_as(&string)
                     .fetch_all(&db)
                     .await
                     .unwrap()
@@ -113,11 +111,6 @@ pub trait SqlxPrimaryKey {
     fn id(&self) -> Self::Column;
 }
 
-#[derive(Reflect, Component, Debug)]
-pub struct SqlxData {
-    pub query: String,
-}
-
 pub struct SqlxPlugin<DB: Database, C: SqlxComponent<DB::Row>> {
     pool: Pool<DB>,
     _c: PhantomData<C>,
@@ -151,7 +144,6 @@ where
         app.insert_resource(SqlxDatabase { pool: self.pool.clone() });
         app.insert_resource(SqlxTasks::<DB::Row, C>::default());
         app.add_event::<SqlxEvent<DB, C>>();
-        app.register_type::<SqlxData>();
         app.add_systems(Update, (Self::tasks, Self::entities));
     }
 }
@@ -166,16 +158,16 @@ where
         mut tasks: ResMut<SqlxTasks<DB::Row, C>>,
         mut events: EventReader<SqlxEvent<DB, C>>,
     ) {
-        // for event in events.read() {
-        //     let task_pool = AsyncComputeTaskPool::get();
-        //     let query = event.query.clone();
-        //     let db = database.pool.clone();
-        //     let q = query.clone();
-        //     let task = task_pool.spawn(async move {
-        //         sqlx::query_as(&q).fetch_all(&db).await
-        //     });
-        //     tasks.queries.push((query, task));
-        // }
+        for event in events.read() {
+            let task_pool = AsyncComputeTaskPool::get();
+            // let callback = event.callback;
+            let db = database.pool.clone();
+            let task = task_pool.spawn(async move {
+                // callback(db)
+                unimplemented!()
+            });
+            tasks.components.push(task);
+        }
     }
 
     pub fn entities(
@@ -197,7 +189,7 @@ where
         //     }
         // }
 
-        tasks.queries.retain_mut(|(sql, task)| {
+        tasks.components.retain_mut(|task| {
             let status = block_on(future::poll_once(task));
             let retain = status.is_none();
             if let Some(result) = status {
@@ -215,14 +207,9 @@ where
                             }
 
                             if let Some(entity) = existing_entity {
-                                commands.entity(entity)
-                                        .insert(task_component)
-                                        .insert(SqlxData { query: sql.clone() });
+                                commands.entity(entity).insert(task_component);
                             } else {
-                                commands.spawn((
-                                    task_component,
-                                    SqlxData { query: sql.clone() }
-                                ));
+                                commands.spawn(task_component);
                             }
                         }
                     }
