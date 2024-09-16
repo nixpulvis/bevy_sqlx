@@ -2,17 +2,10 @@ use bevy::prelude::*;
 use sqlx::{FromRow, Postgres};
 use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
 
-/// ### SQL Table Schema
-///
-/// CREATE TABLE foos (
-///     id    INTEGER   PRIMARY KEY,
-///     text  TEXT      NOT NULL,
-///     flag  BOOLEAN   NOT NULL DEFAULT 0
-/// );
 #[derive(Component, FromRow, Debug)]
+#[allow(unused)]
 struct Foo {
     id: i32,
-    flag: bool,
     text: String,
 }
 
