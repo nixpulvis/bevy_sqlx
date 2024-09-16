@@ -144,9 +144,7 @@ where
         let task_pool = AsyncComputeTaskPool::get();
         for event in events.read() {
             let db = database.pool.clone();
-
             let future = (event.callback)(db);
-
             let task = task_pool.spawn(async move { future.await });
             tasks.components.push(task);
         }
@@ -231,17 +229,16 @@ fn the_one_test() {
     let mut app = App::new();
     app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
 
-    // let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
-    // app.world_mut().send_event(delete);
+    let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
+    app.world_mut().send_event(delete);
 
-    // let text: String = rand::thread_rng()
-    //     .sample_iter(rand::distributions::Alphanumeric)
-    //     .take(10)
-    //     .map(char::from)
-    //     .collect();
-    // let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES (?) RETURNING *")
-    //     .bind(text);
-    // app.world_mut().send_event(insert);
+    let text: String = rand::thread_rng()
+        .sample_iter(rand::distributions::Alphanumeric)
+        .take(10)
+        .map(char::from)
+        .collect();
+    let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES ('test') RETURNING *");
+    app.world_mut().send_event(insert);
 
     let select = SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM foos");
     app.world_mut().send_event(select);
