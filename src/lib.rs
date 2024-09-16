@@ -41,7 +41,7 @@ impl<R: Row, C: SqlxComponent<R>> Default for SqlxTasks<R, C> {
 
 #[derive(Event)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
-    callback: Arc<dyn Fn(Pool<DB>) -> Pin<Box<dyn Future<Output = Vec<C>> + Send>> + Send + Sync>,
+    callback: Arc<dyn Fn(Pool<DB>) -> Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>> + Send + Sync>,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
@@ -56,11 +56,8 @@ where
         let func = move |db: Pool<DB>| {
             let string = string.clone();
             Box::pin(async move {
-                sqlx::query_as(&string.clone())
-                    .fetch_all(&db)
-                    .await
-                    .unwrap()
-            }) as Pin<Box<dyn Future<Output = Vec<C>> + Send>>
+                sqlx::query_as(&string).fetch_all(&db).await
+            }) as Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>>
         };
         SqlxEvent {
             callback: Arc::new(func),
@@ -150,7 +147,7 @@ where
 
             let future = (event.callback)(db);
 
-            let task = task_pool.spawn(async move { Ok(future.await) });
+            let task = task_pool.spawn(async move { future.await });
             tasks.components.push(task);
         }
     }
@@ -215,7 +212,6 @@ fn the_one_test() {
     use bevy::tasks::TaskPool;
     use rand::prelude::*;
     use sqlx::Sqlite;
-    use std::env;
 
     #[derive(Component, FromRow, Debug)]
     struct Foo {
@@ -231,9 +227,9 @@ fn the_one_test() {
 
     AsyncComputeTaskPool::get_or_init(|| TaskPool::new());
 
-    let url = env::var("DATABASE_URL").unwrap();
+    let url = "sqlite:db/sqlite.db";
     let mut app = App::new();
-    app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(&url));
+    app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
 
     let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
     app.world_mut().send_event(delete);
