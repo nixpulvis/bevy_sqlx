@@ -1,4 +1,7 @@
+// #![feature(async_closure)]
 use std::marker::{PhantomData, Unpin};
+use std::sync::Arc;
+use std::future::Future;
 use bevy::prelude::*;
 use bevy::ecs::system::SystemState;
 use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
@@ -28,7 +31,7 @@ where
     R: Row
 {}
 
-pub trait SqlxConn<'c, DB: Database>: Executor<'c, Database = DB> {}
+// pub trait SqlxConn<'c, DB: Database>: Executor<'c, Database = DB> {}
 
 #[derive(Resource, Debug)]
 pub struct SqlxDatabase<DB: Database> {
@@ -50,18 +53,20 @@ impl<R: Row, C: SqlxComponent<R>> Default for SqlxTasks<R, C> {
     }
 }
 
-#[derive(Event, Debug)]
+#[derive(Event)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
-    pub query: String,
-    // pub query: impl Fn(impl SqlxConn) -> SqlxComponent<DB::Row>,
+    callback: Arc<dyn FnMut(Pool<DB>) -> Box<dyn Future<Output=C>> + Send + Sync>,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
 
 impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C> {
     pub fn query(string: &str) -> Self {
+        let func = |db| Box::new(async {
+            sqlx::query_as(string).fetch_all(&db).await
+        });
         SqlxEvent {
-            query: string.to_string(),
+            callback: Arc::new(func),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
@@ -69,7 +74,7 @@ impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C> {
 
     pub fn send(self, events: &mut EventWriter<SqlxEvent<DB, C>>) -> Self {
         events.send(SqlxEvent {
-            query: self.query.clone(),
+            callback: self.callback.clone(),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         });
@@ -78,7 +83,7 @@ impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C> {
 
     pub fn trigger(self, commands: &mut Commands) -> Self {
         commands.trigger(SqlxEvent {
-            query: self.query.clone(),
+            callback: self.callback.clone(),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         });
@@ -148,16 +153,16 @@ where
         mut tasks: ResMut<SqlxTasks<DB::Row, C>>,
         mut events: EventReader<SqlxEvent<DB, C>>,
     ) {
-        for event in events.read() {
-            let task_pool = AsyncComputeTaskPool::get();
-            let query = event.query.clone();
-            let db = database.pool.clone();
-            let q = query.clone();
-            let task = task_pool.spawn(async move {
-                sqlx::query_as(&q).fetch_all(&db).await
-            });
-            tasks.queries.push((query, task));
-        }
+        // for event in events.read() {
+        //     let task_pool = AsyncComputeTaskPool::get();
+        //     let query = event.query.clone();
+        //     let db = database.pool.clone();
+        //     let q = query.clone();
+        //     let task = task_pool.spawn(async move {
+        //         sqlx::query_as(&q).fetch_all(&db).await
+        //     });
+        //     tasks.queries.push((query, task));
+        // }
     }
 
     pub fn entities(
@@ -243,16 +248,16 @@ fn the_one_test() {
     let mut app = App::new();
     app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(&url));
 
-    let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
-    app.world_mut().send_event(delete);
+    // let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
+    // app.world_mut().send_event(delete);
 
-    let text: String = rand::thread_rng()
-        .sample_iter(rand::distributions::Alphanumeric)
-        .take(10)
-        .map(char::from)
-        .collect();
-    let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES (?) RETURNING *").bind(text);
-    app.world_mut().send_event(insert);
+    // let text: String = rand::thread_rng()
+    //     .sample_iter(rand::distributions::Alphanumeric)
+    //     .take(10)
+    //     .map(char::from)
+    //     .collect();
+    // let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES (?) RETURNING *").bind(text);
+    // app.world_mut().send_event(insert);
 
     let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
 
