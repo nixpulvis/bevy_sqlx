@@ -54,7 +54,7 @@ impl<R: Row, C: SqlxComponent<R>> Default for SqlxTasks<R, C> {
 
 #[derive(Event)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
-    callback: Arc<dyn FnOnce(Pool<DB>) -> Box<dyn Future<Output = Vec<C>>> + Send + Sync>,
+    callback: Arc<dyn FnOnce(Pool<DB>) -> Pin<Box<dyn Future<Output = Vec<C>>>> + Send + Sync>,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
@@ -68,13 +68,13 @@ where
             dbg!("HIT");
         let string: String = string.to_string();
         let func = move |db: Pool<DB>| {
-            dbg!("HIT");
-            Box::new(async move {
+            dbg!("HIT 2");
+            Box::pin(async move {
                 sqlx::query_as(&string)
                     .fetch_all(&db)
                     .await
                     .unwrap()
-            }) as Box<dyn Future<Output = Vec<C>>>
+            }) as Pin<Box<dyn Future<Output = Vec<C>>>>
         };
         SqlxEvent {
             callback: Arc::new(func),
@@ -160,11 +160,10 @@ where
     ) {
         for event in events.read() {
             let task_pool = AsyncComputeTaskPool::get();
-            // let callback = event.callback;
+            let callback = event.callback.as_ref().clone();
             let db = database.pool.clone();
             let task = task_pool.spawn(async move {
-                // callback(db)
-                unimplemented!()
+                Ok(callback(db).await)
             });
             tasks.components.push(task);
         }
