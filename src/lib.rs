@@ -1,40 +1,27 @@
-#![feature(async_closure)]
+use bevy::ecs::system::SystemState;
+use bevy::prelude::*;
+use bevy::tasks::futures_lite::future;
+use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
+use sqlx::{Database, Error, Executor, FromRow, IntoArguments, Pool, Row};
+use std::future::Future;
 use std::marker::{PhantomData, Unpin};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::future::Future;
-use bevy::prelude::*;
-use bevy::ecs::system::SystemState;
-use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
-use bevy::tasks::futures_lite::future;
-use sqlx::{
-    Error,
-    Executor,
-    IntoArguments,
-    Database,
-    Pool,
-    Row,
-    FromRow,
-};
 
 pub trait SqlxComponent<R: Row>:
-    SqlxPrimaryKey +
-    Component +
-    for<'r> FromRow<'r, R> +
-    Unpin
-{}
+    SqlxPrimaryKey + Component + for<'r> FromRow<'r, R> + Unpin
+{
+}
 impl<C, R> SqlxComponent<R> for C
 where
-    C: SqlxPrimaryKey +
-        Component +
-        for<'r> FromRow<'r, R> +
-        Unpin,
-    R: Row
-{}
+    C: SqlxPrimaryKey + Component + for<'r> FromRow<'r, R> + Unpin,
+    R: Row,
+{
+}
 
 #[derive(Resource, Debug)]
 pub struct SqlxDatabase<DB: Database> {
-    pub pool: Pool<DB>
+    pub pool: Pool<DB>,
 }
 
 #[derive(Resource, Debug)]
@@ -54,7 +41,7 @@ impl<R: Row, C: SqlxComponent<R>> Default for SqlxTasks<R, C> {
 
 #[derive(Event)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
-    callback: Arc<dyn FnOnce(Pool<DB>) -> Pin<Box<dyn Future<Output = Vec<C>>>> + Send + Sync>,
+    callback: Arc<dyn Fn(Pool<DB>) -> Pin<Box<dyn Future<Output = Vec<C>> + Send>> + Send + Sync>,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
@@ -65,16 +52,15 @@ where
     for<'a> <DB as sqlx::Database>::Arguments<'a>: IntoArguments<'a, DB>,
 {
     pub fn query(string: &str) -> Self {
-            dbg!("HIT");
-        let string: String = string.to_string();
+        let string: Arc<str> = string.into();
         let func = move |db: Pool<DB>| {
-            dbg!("HIT 2");
+            let string = string.clone();
             Box::pin(async move {
-                sqlx::query_as(&string)
+                sqlx::query_as(&string.clone())
                     .fetch_all(&db)
                     .await
                     .unwrap()
-            }) as Pin<Box<dyn Future<Output = Vec<C>>>>
+            }) as Pin<Box<dyn Future<Output = Vec<C>> + Send>>
         };
         SqlxEvent {
             callback: Arc::new(func),
@@ -125,9 +111,7 @@ impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C> {
     }
 
     pub fn url(url: &str) -> Self {
-        let pool = bevy::tasks::block_on(async {
-            Pool::connect(url).await.unwrap()
-        });
+        let pool = bevy::tasks::block_on(async { Pool::connect(url).await.unwrap() });
         SqlxPlugin {
             pool,
             _c: PhantomData,
@@ -141,7 +125,9 @@ where
     for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
 {
     fn build(&self, app: &mut App) {
-        app.insert_resource(SqlxDatabase { pool: self.pool.clone() });
+        app.insert_resource(SqlxDatabase {
+            pool: self.pool.clone(),
+        });
         app.insert_resource(SqlxTasks::<DB::Row, C>::default());
         app.add_event::<SqlxEvent<DB, C>>();
         app.add_systems(Update, (Self::tasks, Self::entities));
@@ -158,13 +144,13 @@ where
         mut tasks: ResMut<SqlxTasks<DB::Row, C>>,
         mut events: EventReader<SqlxEvent<DB, C>>,
     ) {
+        let task_pool = AsyncComputeTaskPool::get();
         for event in events.read() {
-            let task_pool = AsyncComputeTaskPool::get();
-            let callback = event.callback.as_ref().clone();
             let db = database.pool.clone();
-            let task = task_pool.spawn(async move {
-                Ok(callback(db).await)
-            });
+
+            let future = (event.callback)(db);
+
+            let task = task_pool.spawn(async move { Ok(future.await) });
             tasks.components.push(task);
         }
     }
@@ -226,10 +212,10 @@ where
 
 #[test]
 fn the_one_test() {
-    use std::env;
-    use rand::prelude::*;
     use bevy::tasks::TaskPool;
+    use rand::prelude::*;
     use sqlx::Sqlite;
+    use std::env;
 
     #[derive(Component, FromRow, Debug)]
     struct Foo {
@@ -238,7 +224,9 @@ fn the_one_test() {
     }
     impl SqlxPrimaryKey for Foo {
         type Column = u32;
-        fn id(&self) -> Self::Column { self.id }
+        fn id(&self) -> Self::Column {
+            self.id
+        }
     }
 
     AsyncComputeTaskPool::get_or_init(|| TaskPool::new());
@@ -255,7 +243,8 @@ fn the_one_test() {
         .take(10)
         .map(char::from)
         .collect();
-    let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES (?) RETURNING *").bind(text);
+    let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES (?) RETURNING *")
+        .bind(text);
     app.world_mut().send_event(insert);
 
     let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
