@@ -1,8 +1,8 @@
 use rand::prelude::*;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use sqlx::{FromRow, Sqlite};
-use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
+use sqlx::{FromRow, Sqlite, sqlite::SqliteRow};
+use bevy_sqlx::{SqlxPlugin, SqlxComponent, SqlxPrimaryKey, SqlxEvent};
 
 #[derive(Reflect, Component, FromRow, Debug, Default, Clone)]
 struct Foo {
@@ -26,13 +26,7 @@ impl Plugin for FooPlugin {
         let url = "sqlite:db/sqlite.db";
         app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
         app.add_systems(Update, Self::send_foo_events);
-        app.observe(|trigger: Trigger<SqlxEvent<Sqlite, Foo>>,
-                  foo_query: Query<&Foo>| {
-            dbg!({ "observe"; &foo_query.iter().len() });
-            for foo in &mut foo_query.iter() {
-                dbg!({ "observe"; &foo });
-            }
-        });
+        app.observe(handle_trigger::<Foo>);
     }
 }
 
@@ -104,10 +98,7 @@ impl Plugin for BarPlugin {
         let url = "sqlite:db/sqlite.db";
         app.add_plugins(SqlxPlugin::<Sqlite, Bar>::url(&url));
         app.add_systems(Update, Self::send_bar_events);
-        app.observe(|trigger: Trigger<SqlxEvent<Sqlite, Bar>>,
-                  bar_query: Query<&Bar>| {
-            dbg!(bar_query);
-        });
+        app.observe(handle_trigger::<Bar>);
     }
 }
 
@@ -146,6 +137,15 @@ impl BarPlugin {
                 .send(&mut events)
                 .trigger(&mut commands);
         }
+    }
+}
+
+fn handle_trigger<C: SqlxComponent<SqliteRow> + std::fmt::Debug>
+(trigger: Trigger<SqlxEvent<Sqlite, C>>, query: Query<&C>)
+{
+    dbg!({ "observe"; &query.iter().len() });
+    for foo in &mut query.iter() {
+        dbg!({ "observe"; &foo });
     }
 }
 
