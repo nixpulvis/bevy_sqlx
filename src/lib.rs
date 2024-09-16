@@ -1,3 +1,4 @@
+#![feature(async_closure)]
 use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::future;
@@ -66,6 +67,21 @@ where
         }
     }
 
+    pub fn callback(func: impl Fn(Pool<DB>) ->
+        Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>>
+            + Send + Sync + 'static)
+        -> Self
+    {
+        let func = move |db: Pool<DB>| {
+            func(db)
+        };
+        SqlxEvent {
+            callback: Arc::new(func),
+            _db: PhantomData::<DB>,
+            _c: PhantomData::<C>,
+        }
+    }
+
     pub fn send(self, events: &mut EventWriter<SqlxEvent<DB, C>>) -> Self {
         events.send(SqlxEvent {
             callback: self.callback.clone(),
@@ -84,7 +100,7 @@ where
         self
     }
 
-    pub fn bind<T>(self, value: T) -> Self {
+    pub fn bind<T>(self, _value: T) -> Self {
         self
     }
 }
@@ -205,17 +221,20 @@ where
     }
 }
 
-#[test]
-fn the_one_test() {
+#[cfg(test)]
+mod tests {
+    use bevy::prelude::*;
     use bevy::tasks::TaskPool;
     use rand::prelude::*;
-    use sqlx::Sqlite;
+    use sqlx::{FromRow, Sqlite};
+    use crate::*;
 
     #[derive(Component, FromRow, Debug)]
     struct Foo {
         id: u32,
         text: String,
     }
+
     impl SqlxPrimaryKey for Foo {
         type Column = u32;
         fn id(&self) -> Self::Column {
@@ -223,38 +242,89 @@ fn the_one_test() {
         }
     }
 
-    AsyncComputeTaskPool::get_or_init(|| TaskPool::new());
-
-    let url = "sqlite:db/sqlite.db";
-    let mut app = App::new();
-    app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
-
-    let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
-    app.world_mut().send_event(delete);
-
-    let text: String = rand::thread_rng()
-        .sample_iter(rand::distributions::Alphanumeric)
-        .take(10)
-        .map(char::from)
-        .collect();
-    let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES ('test') RETURNING *");
-    app.world_mut().send_event(insert);
-
-    let select = SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM foos");
-    app.world_mut().send_event(select);
-
-
-    let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
-
-    let mut tries = 0;
-    let mut len = system_state.get(app.world()).iter().len();
-    while !(len > 0) && tries < 1000 {
-        app.update();
-        len = system_state.get(app.world()).iter().len();
-        tries += 1;
+    fn setup_app() -> App {
+        AsyncComputeTaskPool::get_or_init(|| TaskPool::new());
+        let url = "sqlite:db/sqlite.db";
+        let mut app = App::new();
+        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
+        app
     }
 
-    let query = system_state.get(app.world());
-    assert_eq!(1, query.single().id);
-    assert_eq!("test", query.single().text);
+    #[test]
+    fn test_query() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
+
+        let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
+        app.world_mut().send_event(delete);
+
+        let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES ('test') RETURNING *");
+        app.world_mut().send_event(insert);
+
+        let select = SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM foos");
+        app.world_mut().send_event(select);
+
+        let mut tries = 0;
+        let mut len = system_state.get(app.world()).iter().len();
+        while !(len > 0) && tries < 1000 {
+            app.update();
+            len = system_state.get(app.world()).iter().len();
+            tries += 1;
+        }
+
+        let query = system_state.get(app.world());
+        assert_eq!(1, query.single().id);
+        assert_eq!("test", query.single().text);
+    }
+
+    #[test]
+    fn test_callback() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
+
+        let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
+        app.world_mut().send_event(delete);
+
+        // let func = move |db: Pool<Sqlite>| {
+        //     Box::pin(async move {
+        //         sqlx::query_as("INSERT INTO foos (text) VALUES ('test') RETURNING *")
+        //             .fetch_all(&db).await
+        //     }) as Pin<Box<dyn Future<Output = Result<Vec<Foo>, Error>> + Send>>
+        // };
+        // let insert = SqlxEvent {
+        //     callback: Arc::new(func),
+        //     _db: PhantomData::<Sqlite>,
+        //     _c: PhantomData::<Foo>,
+        // };
+        let insert = SqlxEvent::<Sqlite, Foo>::callback(move |db: Pool<Sqlite>| {
+            Box::pin(async move {
+                sqlx::query_as("INSERT INTO foos (text) VALUES ('test') RETURNING *")
+                    .fetch_all(&db).await
+            })
+        });
+
+        app.world_mut().send_event(insert);
+
+        let select = SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM foos");
+        app.world_mut().send_event(select);
+
+        let mut tries = 0;
+        let mut len = system_state.get(app.world()).iter().len();
+        while !(len > 0) && tries < 1000 {
+            app.update();
+            len = system_state.get(app.world()).iter().len();
+            tries += 1;
+        }
+
+        let query = system_state.get(app.world());
+        assert_eq!(1, query.single().id);
+        assert_eq!("test", query.single().text);
+    }
+
+
+        // let text: String = rand::thread_rng()
+        //     .sample_iter(rand::distributions::Alphanumeric)
+        //     .take(10)
+        //     .map(char::from)
+        //     .collect();
 }
