@@ -1,5 +1,6 @@
-// #![feature(async_closure)]
+#![feature(async_closure)]
 use std::marker::{PhantomData, Unpin};
+use std::pin::Pin;
 use std::sync::Arc;
 use std::future::Future;
 use bevy::prelude::*;
@@ -31,8 +32,6 @@ where
     R: Row
 {}
 
-// pub trait SqlxConn<'c, DB: Database>: Executor<'c, Database = DB> {}
-
 #[derive(Resource, Debug)]
 pub struct SqlxDatabase<DB: Database> {
     pub pool: Pool<DB>
@@ -53,18 +52,32 @@ impl<R: Row, C: SqlxComponent<R>> Default for SqlxTasks<R, C> {
     }
 }
 
+// type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + Sync + 'a>>;
+
+
+
 #[derive(Event)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
-    callback: Arc<dyn FnMut(Pool<DB>) -> Box<dyn Future<Output=C>> + Send + Sync>,
+    callback: Arc<dyn FnOnce(Pool<DB>) -> Box<dyn Future<Output = Vec<C>>> + Send + Sync>,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
 
-impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C> {
+impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>
+where
+    for<'c> &'c mut DB::Connection: Executor<'c, Database = DB>,
+    for<'a> <DB as sqlx::Database>::Arguments<'a>: IntoArguments<'a, DB>,
+{
     pub fn query(string: &str) -> Self {
-        let func = |db| Box::new(async {
-            sqlx::query_as(string).fetch_all(&db).await
-        });
+        let string: String = string.to_string();
+        let func = move |db: Pool<DB>| {
+            Box::new(async move {
+                sqlx::query_as(&string.clone())
+                    .fetch_all(&db)
+                    .await
+                    .unwrap()
+            }) as Box<dyn Future<Output = Vec<C>>>
+        };
         SqlxEvent {
             callback: Arc::new(func),
             _db: PhantomData::<DB>,
@@ -248,16 +261,16 @@ fn the_one_test() {
     let mut app = App::new();
     app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(&url));
 
-    // let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
-    // app.world_mut().send_event(delete);
+    let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
+    app.world_mut().send_event(delete);
 
-    // let text: String = rand::thread_rng()
-    //     .sample_iter(rand::distributions::Alphanumeric)
-    //     .take(10)
-    //     .map(char::from)
-    //     .collect();
-    // let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES (?) RETURNING *").bind(text);
-    // app.world_mut().send_event(insert);
+    let text: String = rand::thread_rng()
+        .sample_iter(rand::distributions::Alphanumeric)
+        .take(10)
+        .map(char::from)
+        .collect();
+    let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES (?) RETURNING *").bind(text);
+    app.world_mut().send_event(insert);
 
     let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
 

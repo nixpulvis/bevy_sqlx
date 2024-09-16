@@ -35,7 +35,6 @@ fn main() {
         .add_systems(Update, exit_timer)
         .observe(|trigger: Trigger<SqlxEvent<Sqlite, Foo>>,
                   foo_query: Query<(&Foo, &SqlxData)>| {
-            dbg!(trigger.event());
             for (foo, data) in &foo_query {
                 dbg!((&data, &foo));
             }
