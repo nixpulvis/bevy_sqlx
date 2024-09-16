@@ -39,8 +39,9 @@ impl<R: Row, C: SqlxComponent<R>> Default for SqlxTasks<R, C> {
     }
 }
 
-#[derive(Event)]
+#[derive(Event, Clone)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
+    label: Option<String>,
     call: Arc<dyn Fn(Pool<DB>) -> Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>> + Send + Sync>,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
@@ -52,21 +53,22 @@ where
     for<'a> <DB as sqlx::Database>::Arguments<'a>: IntoArguments<'a, DB>,
 {
     pub fn query(string: &str) -> Self {
-        let string: Arc<str> = string.into();
-        Self::call(move |db| {
-            let s = string.clone();
+        let arc: Arc<str> = string.into();
+        Self::call(Some(string), move |db| {
+            let s = arc.clone();
             async move {
                 sqlx::query_as(&s).fetch_all(&db).await
             }
         })
     }
 
-    pub fn call<F, T>(func: F) -> Self
+    pub fn call<F, T>(label: Option<&str>, func: F) -> Self
     where
         F: Fn(Pool<DB>) -> T + Send + Sync + 'static,
         T: Future<Output = Result<Vec<C>, Error>> + Send + 'static,
     {
         SqlxEvent {
+            label: label.map(|s| s.to_string()),
             call: Arc::new(move |db: Pool<DB>| {
                 Box::pin(func(db))
             }),
@@ -77,6 +79,7 @@ where
 
     pub fn send(self, events: &mut EventWriter<SqlxEvent<DB, C>>) -> Self {
         events.send(SqlxEvent {
+            label: self.label.clone(),
             call: self.call.clone(),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
@@ -86,6 +89,7 @@ where
 
     pub fn trigger(self, commands: &mut Commands) -> Self {
         commands.trigger(SqlxEvent {
+            label: self.label.clone(),
             call: self.call.clone(),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
@@ -93,8 +97,8 @@ where
         self
     }
 
-    pub fn bind<T>(self, _value: T) -> Self {
-        self
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_deref()
     }
 }
 
@@ -218,7 +222,6 @@ where
 mod tests {
     use bevy::prelude::*;
     use bevy::tasks::TaskPool;
-    use rand::prelude::*;
     use sqlx::{FromRow, Sqlite};
     use crate::*;
 
@@ -248,10 +251,8 @@ mod tests {
         let mut app = setup_app();
         let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
 
-        let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
-        app.world_mut().send_event(delete);
-
-        let insert = SqlxEvent::<Sqlite, Foo>::query("INSERT INTO foos (text) VALUES ('test') RETURNING *");
+        let sql = "INSERT INTO foos (text) VALUES ('test query') RETURNING *";
+        let insert = SqlxEvent::<Sqlite, Foo>::query(sql);
         app.world_mut().send_event(insert);
 
         let mut tries = 0;
@@ -263,9 +264,7 @@ mod tests {
         }
 
         let query = system_state.get(app.world());
-        assert_eq!(1, query.iter().len());
-        assert_eq!(1, query.single().id);
-        assert_eq!("test", query.single().text);
+        assert_eq!("test query", query.single().text);
     }
 
     #[test]
@@ -276,18 +275,12 @@ mod tests {
         let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
         app.world_mut().send_event(delete);
 
-        let insert = SqlxEvent::<Sqlite, Foo>::call(move |db| {
-            async move {
-                let text: String = rand::thread_rng()
-                    .sample_iter(rand::distributions::Alphanumeric)
-                    .take(10)
-                    .map(char::from)
-                    .collect();
-                sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
-                    .bind(text)
-                    .fetch_all(&db).await
-            }
-        });
+        let text = "test callback";
+        let insert = SqlxEvent::<Sqlite, Foo>::call(None, move |db| { async move {
+            sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
+                .bind(text)
+                .fetch_all(&db).await
+        }});
         app.world_mut().send_event(insert);
 
         let mut tries = 0;
@@ -299,7 +292,6 @@ mod tests {
         }
 
         let query = system_state.get(app.world());
-        assert_eq!(1, query.iter().len());
-        assert_eq!(1, query.single().id);
+        assert_eq!(text, query.single().text);
     }
 }
