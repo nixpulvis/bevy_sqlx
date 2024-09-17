@@ -22,13 +22,16 @@ use sqlx::{FromRow, Row};
 
 /// Rows in the database represent a spesifc [`Component`]
 pub trait SqlxComponent<R: Row>:
-    PrimaryKey + Component + for<'r> FromRow<'r, R> + Unpin {}
+    PrimaryKey + Component + for<'r> FromRow<'r, R> + Unpin
+{
+}
 
 impl<C, R> SqlxComponent<R> for C
 where
     C: PrimaryKey + Component + for<'r> FromRow<'r, R> + Unpin,
-    R: Row {}
-
+    R: Row,
+{
+}
 
 /// A way to identify components by themselves
 //

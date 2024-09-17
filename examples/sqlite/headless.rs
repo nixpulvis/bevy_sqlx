@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::{app::ScheduleRunnerPlugin, utils::Duration};
+use bevy_sqlx::{PrimaryKey, SqlxEvent, SqlxPlugin};
 use sqlx::{FromRow, Sqlite};
-use bevy_sqlx::{SqlxPlugin, PrimaryKey, SqlxEvent};
 
 #[allow(unused_variables, dead_code)]
 #[derive(Component, FromRow, Debug)]
@@ -30,30 +30,26 @@ fn main() {
     App::new()
         .add_plugins(MinimalPlugins.set(runner))
         .add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(url))
-        .insert_resource(ExitTimer(Timer::new(tick_rate * 1000, TimerMode::Once)))
+        .insert_resource(ExitTimer(Timer::new(
+            tick_rate * 1000,
+            TimerMode::Once,
+        )))
         .add_systems(Startup, (delete, insert.after(delete)))
         .add_systems(Update, (select, update))
         .add_systems(Update, exit_timer)
         .run();
 }
 
-fn delete(
-    mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
-) {
+fn delete(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
     events.send(SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos"));
 }
 
-fn insert(
-    mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
-) {
+fn insert(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
     let sql = "INSERT INTO foos(text) VALUES ('insert') RETURNING *";
     events.send(SqlxEvent::<Sqlite, Foo>::query(sql));
 }
 
-fn select(
-    foos: Query<&Foo>,
-    mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
-) {
+fn select(foos: Query<&Foo>, mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
     events.send(SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM foos"));
 
     for foo in &foos {
@@ -61,17 +57,15 @@ fn select(
     }
 }
 
-fn update(
-    time: Res<Time>,
-    mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
-) {
+fn update(time: Res<Time>, mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
     let text = time.elapsed().as_millis().to_string();
     events.send(SqlxEvent::<Sqlite, Foo>::call(None, move |db| {
         let text = text.clone();
         async move {
             sqlx::query_as("UPDATE foos SET text = '?'")
                 .bind(text)
-                .fetch_all(&db).await
+                .fetch_all(&db)
+                .await
         }
     }));
 }

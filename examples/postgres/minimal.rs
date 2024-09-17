@@ -1,6 +1,6 @@
 use bevy::prelude::*;
+use bevy_sqlx::{PrimaryKey, SqlxEvent, SqlxPlugin};
 use sqlx::{FromRow, Postgres};
-use bevy_sqlx::{SqlxPlugin, PrimaryKey, SqlxEvent};
 
 #[derive(Component, FromRow, Debug)]
 #[allow(unused)]

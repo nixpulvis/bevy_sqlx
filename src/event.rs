@@ -7,14 +7,14 @@
 //! processed, one of:
 //! - [`SqlxEventStatus::Spawn`]
 //! - [`SqlxEventStatus::Update`]
+use crate::*;
 use bevy::prelude::*;
-use bevy::tasks::{AsyncComputeTaskPool};
+use bevy::tasks::AsyncComputeTaskPool;
 use sqlx::{Database, Error, Executor, IntoArguments, Pool};
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
-use crate::*;
 
 /// An [`Event`] for fetching data from the [`SqlxDatabase`]
 ///
@@ -46,8 +46,14 @@ pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
     _c: PhantomData<C>,
 }
 
-type SqlxEventFunc<DB, C> = Arc<dyn Fn(Pool<DB>) ->
-    Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>> + Send + Sync>;
+type SqlxEventFunc<DB, C> = Arc<
+    dyn Fn(
+            Pool<DB>,
+        )
+            -> Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>>
+        + Send
+        + Sync,
+>;
 
 impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>
 where
@@ -66,9 +72,7 @@ where
         let arc: Arc<str> = string.into();
         Self::call(Some(string), move |db| {
             let s = arc.clone();
-            async move {
-                sqlx::query_as(&s).fetch_all(&db).await
-            }
+            async move { sqlx::query_as(&s).fetch_all(&db).await }
         })
     }
 
@@ -92,9 +96,7 @@ where
     {
         SqlxEvent {
             label: label.map(|s| s.to_string()),
-            func: Arc::new(move |db: Pool<DB>| {
-                Box::pin(func(db))
-            }),
+            func: Arc::new(move |db: Pool<DB>| Box::pin(func(db))),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
@@ -105,7 +107,6 @@ where
         self.label.clone().map(|s| s.to_string())
     }
 }
-
 
 /// An [`Event`] sent while processing an [`SqlxEvent`]
 ///
@@ -133,7 +134,6 @@ pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
     Update(Option<String>, C::Column, PhantomData<DB>),
     Error(Option<String>, Error),
 }
-
 
 impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>
 where
@@ -163,15 +163,14 @@ where
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use std::assert_matches::assert_matches;
-    use bevy::prelude::*;
-    use bevy::ecs::system::SystemState;
-    use bevy::tasks::{TaskPool, AsyncComputeTaskPool};
-    use sqlx::{FromRow, Sqlite};
     use crate::*;
+    use bevy::ecs::system::SystemState;
+    use bevy::prelude::*;
+    use bevy::tasks::{AsyncComputeTaskPool, TaskPool};
+    use sqlx::{FromRow, Sqlite};
+    use std::assert_matches::assert_matches;
 
     #[derive(Component, FromRow, Debug)]
     struct Foo {
@@ -234,15 +233,16 @@ mod tests {
         // We should now have a single spawned event!
         let mut reader = system_state.get(app.world()).1;
         let mut events = reader.read();
-        assert_matches!(events.next().unwrap(),
-                        SqlxEventStatus::Spawn(_,_,_))
+        assert_matches!(events.next().unwrap(), SqlxEventStatus::Spawn(_, _, _))
     }
 
-    fn no_events(app: &mut App, system_state: &mut SystemState<(
-        Query<&Foo>,
-        EventReader<SqlxEventStatus<Sqlite, Foo>>,
-    )>) -> bool
-    {
+    fn no_events(
+        app: &mut App,
+        system_state: &mut SystemState<(
+            Query<&Foo>,
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        )>,
+    ) -> bool {
         let mut reader = system_state.get(app.world()).1;
         let events = reader.read();
         events.len() == 0

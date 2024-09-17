@@ -1,14 +1,9 @@
-use std::sync::Arc;
-use rand::prelude::*;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use bevy_sqlx::{PrimaryKey, SqlxEvent, SqlxEventStatus, SqlxPlugin};
+use rand::prelude::*;
 use sqlx::{FromRow, Sqlite};
-use bevy_sqlx::{
-    SqlxPlugin,
-    SqlxEvent,
-    SqlxEventStatus,
-    PrimaryKey,
-};
+use std::sync::Arc;
 
 #[derive(Reflect, Component, FromRow, Debug, Default, Clone)]
 #[allow(unused)]
@@ -43,36 +38,42 @@ impl FooPlugin {
         mut commands: Commands,
         mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
     ) {
-        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyD) {
+        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyD)
+        {
             events.send(SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos"));
             for (entity, _foo) in foos_query.iter() {
                 commands.entity(entity).despawn_recursive();
             }
         }
 
-        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyI) {
-            events.send(SqlxEvent::<Sqlite, Foo>::call(Some("INSERT"), move |db| {
-                async move {
+        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyI)
+        {
+            events.send(SqlxEvent::<Sqlite, Foo>::call(
+                Some("INSERT"),
+                move |db| async move {
                     let text: String = rand::thread_rng()
                         .sample_iter(rand::distributions::Alphanumeric)
                         .take(10)
                         .map(char::from)
                         .collect();
-                    sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
-                        .bind(text)
-                        .fetch_all(&db).await
-                }
-            });
+                    sqlx::query_as(
+                        "INSERT INTO foos (text) VALUES (?) RETURNING *",
+                    )
+                    .bind(text)
+                    .fetch_all(&db)
+                    .await
+                },
+            ));
         }
 
-        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyS) {
+        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyS)
+        {
             SqlxEvent::<Sqlite, Foo>::query("SELECT id, text, flag FROM foos")
                 .send(&mut events)
                 .trigger(&mut commands);
         }
     }
 }
-
 
 #[derive(Reflect, Component, FromRow, Debug, Default, Clone)]
 struct Bar {
@@ -88,7 +89,6 @@ impl PrimaryKey for Bar {
         self.id
     }
 }
-
 
 pub struct BarPlugin;
 
@@ -108,7 +108,8 @@ impl BarPlugin {
         mut commands: Commands,
         mut events: EventWriter<SqlxEvent<Sqlite, Bar>>,
     ) {
-        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyD) {
+        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyD)
+        {
             SqlxEvent::<Sqlite, Bar>::query("DELETE FROM bars")
                 .send(&mut events)
                 .trigger(&mut commands);
@@ -117,25 +118,28 @@ impl BarPlugin {
             }
         }
 
-        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyI) {
+        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyI)
+        {
             // Choose a random Foo to be associated with
-            if let Some(foo) = foos_query.iter().choose(&mut rand::thread_rng()) {
+            if let Some(foo) = foos_query.iter().choose(&mut rand::thread_rng())
+            {
                 let foo: Arc<Foo> = foo.clone().into();
                 let sql = "INSERT INTO bars (foo_id) VALUES (?) RETURNING *";
                 SqlxEvent::<Sqlite, Bar>::call(Some(sql), move |db| {
                     let foo = foo.clone();
                     async move {
-                        sqlx::query_as(sql)
-                            .bind(foo.id)
-                            .fetch_all(&db).await
+                        sqlx::query_as(sql).bind(foo.id).fetch_all(&db).await
                     }
-                }).send(&mut events).trigger(&mut commands);
+                })
+                .send(&mut events)
+                .trigger(&mut commands);
             } else {
                 dbg!("No Foo to choose from.");
             }
         }
 
-        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyS) {
+        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyS)
+        {
             SqlxEvent::<Sqlite, Bar>::query("SELECT * FROM bars")
                 .send(&mut events)
                 .trigger(&mut commands);
@@ -151,9 +155,7 @@ fn main() {
         .add_plugins(BarPlugin)
         .register_type::<Foo>()
         .register_type::<Bar>()
-        .add_systems(Update, (watch_status,
-                              detect_changed,
-                              detect_removals))
+        .add_systems(Update, (watch_status, detect_changed, detect_removals))
         .run();
 }
 
@@ -162,10 +164,16 @@ fn watch_status(
     mut bar_statuses: EventReader<SqlxEventStatus<Sqlite, Bar>>,
 ) {
     for foo_status in foo_statuses.read() {
-        dbg!({ "Foo status"; foo_status });
+        dbg!({
+            "Foo status";
+            foo_status
+        });
     }
     for bar_status in bar_statuses.read() {
-        dbg!({ "Bar status"; bar_status });
+        dbg!({
+            "Bar status";
+            bar_status
+        });
     }
 }
 
@@ -174,10 +182,16 @@ fn detect_changed(
     bar_query: Query<(Entity, &Bar), Changed<Bar>>,
 ) {
     for foo in &foo_query {
-        dbg!({ "Foo changed"; &foo});
+        dbg!({
+            "Foo changed";
+            &foo
+        });
     }
     for bar in &bar_query {
-        dbg!({ "Bar changed"; &bar});
+        dbg!({
+            "Bar changed";
+            &bar
+        });
     }
 }
 
@@ -186,9 +200,15 @@ fn detect_removals(
     mut bar_removals: RemovedComponents<Bar>,
 ) {
     for entity in foo_removals.read() {
-        dbg!({ "foo removed"; entity });
+        dbg!({
+            "foo removed";
+            entity
+        });
     }
     for entity in bar_removals.read() {
-        dbg!({ "bar removed"; entity });
+        dbg!({
+            "bar removed";
+            entity
+        });
     }
 }

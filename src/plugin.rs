@@ -1,8 +1,8 @@
+use crate::*;
 use bevy::prelude::*;
 use bevy::tasks::block_on;
 use sqlx::{Database, Executor, IntoArguments, Pool};
 use std::marker::PhantomData;
-use crate::*;
 
 /// A [`Plugin`](bevy::prelude::Plugin) to add to an
 /// [`App`](bevy::prelude::App)
@@ -35,10 +35,7 @@ impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C> {
     /// SqlxPlugin::<Sqlite, SqlxDummy>::from_pool(pool);
     /// ```
     pub fn from_pool(pool: Pool<DB>) -> Self {
-        SqlxPlugin {
-            pool,
-            _c: PhantomData,
-        }
+        SqlxPlugin { pool, _c: PhantomData }
     }
 
     /// Build a plugin with a new connection from the given `url`
@@ -51,22 +48,18 @@ impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C> {
     /// ```
     pub fn from_url(url: &str) -> Self {
         let pool = block_on(async { Pool::connect(url).await.unwrap() });
-        SqlxPlugin {
-            pool,
-            _c: PhantomData,
-        }
+        SqlxPlugin { pool, _c: PhantomData }
     }
 }
 
-impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> Plugin for SqlxPlugin<DB, C>
+impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> Plugin
+    for SqlxPlugin<DB, C>
 where
     for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
     for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
 {
     fn build(&self, app: &mut App) {
-        app.insert_resource(SqlxDatabase {
-            pool: self.pool.clone(),
-        });
+        app.insert_resource(SqlxDatabase { pool: self.pool.clone() });
         app.insert_resource(SqlxTasks::<DB, C>::default());
         app.add_event::<SqlxEvent<DB, C>>();
         app.add_event::<SqlxEventStatus<DB, C>>();

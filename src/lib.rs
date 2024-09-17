@@ -131,14 +131,13 @@ pub use self::plugin::*;
 mod tasks;
 pub use self::tasks::*;
 
-
 #[cfg(test)]
 mod tests {
-    use bevy::prelude::*;
-    use bevy::ecs::system::SystemState;
-    use bevy::tasks::{TaskPool, AsyncComputeTaskPool};
-    use sqlx::{FromRow, Sqlite};
     use crate::*;
+    use bevy::ecs::system::SystemState;
+    use bevy::prelude::*;
+    use bevy::tasks::{AsyncComputeTaskPool, TaskPool};
+    use sqlx::{FromRow, Sqlite};
 
     #[derive(Component, FromRow, Debug)]
     struct Foo {
@@ -193,11 +192,13 @@ mod tests {
         app.world_mut().send_event(delete);
 
         let text = "test callback";
-        let insert = SqlxEvent::<Sqlite, Foo>::call(None, move |db| { async move {
-            sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
-                .bind(text)
-                .fetch_all(&db).await
-        }});
+        let insert =
+            SqlxEvent::<Sqlite, Foo>::call(None, move |db| async move {
+                sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
+                    .bind(text)
+                    .fetch_all(&db)
+                    .await
+            });
         app.world_mut().send_event(insert);
 
         let mut tries = 0;
