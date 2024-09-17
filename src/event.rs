@@ -291,7 +291,7 @@ mod tests {
             EventReader<SqlxEventStatus<Sqlite, Foo>>,
         )> = SystemState::new(app.world_mut());
 
-        // Sent an event.
+        // Send an event.
         let sql = "INSERT INTO foos (text) VALUES ('tstevtsts') RETURNING *";
         let insert = SqlxEvent::<Sqlite, Foo>::query(sql);
         app.world_mut().send_event(insert);

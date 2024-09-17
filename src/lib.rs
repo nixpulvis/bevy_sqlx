@@ -13,36 +13,62 @@
 //! ```
 //! # use bevy::prelude::*;
 //! # use sqlx::{FromRow, Sqlite};
-//! # use bevy_sqlx::{SqlxPlugin, PrimaryKey};
+//! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, PrimaryKey};
 //! #
 //! #[derive(Component, FromRow)]
-//! struct MyRecord {
+//! struct Foo {
 //!     id: u32,
 //!     flag: bool,
 //!     text: String,
 //! }
 //!
-//! impl PrimaryKey for MyRecord {
+//! impl PrimaryKey for Foo {
 //!     type Column = u32;
-//!
-//!     fn primary_key(&self) -> Self::Column {
-//!         self.id
-//!     }
+//!     fn primary_key(&self) -> Self::Column { self.id }
 //! }
 //!
-//! fn main() {
-//!     let url = "sqlite:db/sqlite.db";
-//!     App::new()
-//!         .add_plugins(DefaultPlugins)
-//!         .add_plugins(SqlxPlugin::<Sqlite, MyRecord>::from_url(&url))
-//!         .run();
-//! }
+//! let url = "sqlite:db/sqlite.db";
+//! let app = App::new()
+//!     .add_plugins(DefaultPlugins)
+//!     .add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(&url))
+//!     .run();
 //! ```
 //!
 //! ### Usage
 //!
 //! - Send [`SqlxEvent`] events to query the database
 //! - Wait for [`SqlxTasks`] to finish updating entities
+//!
+//! ```
+//! # use bevy::prelude::*;
+//! # use sqlx::{FromRow, Sqlite};
+//! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, PrimaryKey};
+//! # #[derive(Component, FromRow)]
+//! # struct Foo {
+//! #     id: u32,
+//! #     flag: bool,
+//! #     text: String,
+//! # }
+//! # impl PrimaryKey for Foo {
+//! #     type Column = u32;
+//! #     fn primary_key(&self) -> Self::Column {
+//! #         self.id
+//! #     }
+//! # }
+//!
+//! let url = "sqlite:db/sqlite.db";
+//! let mut app = App::new();
+//! app.add_plugins(DefaultPlugins);
+//! app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(&url));
+//!
+//! // SELECT all foos from the database.
+//! let sql = "SELECT * FROM foos";
+//! app.world_mut().send_event(SqlxEvent::<Sqlite, Foo>::query(sql));
+//!
+//! // Run the app
+//! app.run();
+//! ```
+//!
 
 pub mod component;
 pub use self::component::*;
@@ -91,7 +117,8 @@ mod tests {
     #[test]
     fn test_query() {
         let mut app = setup_app();
-        let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
+        let mut system_state: SystemState<Query<&Foo>> =
+            SystemState::new(app.world_mut());
 
         let sql = "INSERT INTO foos (text) VALUES ('test query') RETURNING *";
         let insert = SqlxEvent::<Sqlite, Foo>::query(sql);
@@ -112,7 +139,8 @@ mod tests {
     #[test]
     fn test_callback() {
         let mut app = setup_app();
-        let mut system_state: SystemState<Query<&Foo>> = SystemState::new(app.world_mut());
+        let mut system_state: SystemState<Query<&Foo>> =
+            SystemState::new(app.world_mut());
 
         let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
         app.world_mut().send_event(delete);
