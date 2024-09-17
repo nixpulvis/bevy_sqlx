@@ -6,11 +6,13 @@ use std::pin::Pin;
 use std::sync::Arc;
 use crate::*;
 
+type SqlxEventFunc<DB, C> = Arc<dyn Fn(Pool<DB>) ->
+    Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>> + Send + Sync>;
+
 #[derive(Event, Clone)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
     label: Option<String>,
-    // TODO: tmp
-    pub call: Arc<dyn Fn(Pool<DB>) -> Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>> + Send + Sync>,
+    func: SqlxEventFunc<DB, C>,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
@@ -37,7 +39,7 @@ where
     {
         SqlxEvent {
             label: label.map(|s| s.to_string()),
-            call: Arc::new(move |db: Pool<DB>| {
+            func: Arc::new(move |db: Pool<DB>| {
                 Box::pin(func(db))
             }),
             _db: PhantomData::<DB>,
@@ -48,7 +50,7 @@ where
     pub fn send(self, events: &mut EventWriter<SqlxEvent<DB, C>>) -> Self {
         events.send(SqlxEvent {
             label: self.label.clone(),
-            call: self.call.clone(),
+            func: self.func.clone(),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         });
@@ -58,7 +60,7 @@ where
     pub fn trigger(self, commands: &mut Commands) -> Self {
         commands.trigger(SqlxEvent {
             label: self.label.clone(),
-            call: self.call.clone(),
+            func: self.func.clone(),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         });
@@ -67,5 +69,9 @@ where
 
     pub fn label(&self) -> Option<&str> {
         self.label.as_deref()
+    }
+
+    pub(crate) fn func(&self) -> &SqlxEventFunc<DB, C> {
+        &self.func
     }
 }

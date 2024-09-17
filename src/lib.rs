@@ -12,7 +12,8 @@ pub use self::tasks::*;
 #[cfg(test)]
 mod tests {
     use bevy::prelude::*;
-    use bevy::tasks::TaskPool;
+    use bevy::ecs::system::SystemState;
+    use bevy::tasks::{TaskPool, AsyncComputeTaskPool};
     use sqlx::{FromRow, Sqlite};
     use crate::*;
 

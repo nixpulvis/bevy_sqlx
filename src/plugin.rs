@@ -56,8 +56,7 @@ where
         let task_pool = AsyncComputeTaskPool::get();
         for event in events.read() {
             let db = database.pool.clone();
-            // TODO: use caller method
-            let future = (event.call)(db);
+            let future = (event.func())(db);
             let task = task_pool.spawn(async move { future.await });
             tasks.components.push(task);
         }
