@@ -3,7 +3,7 @@ use rand::prelude::*;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use sqlx::{FromRow, Sqlite, sqlite::SqliteRow};
-use bevy_sqlx::{SqlxPlugin, SqlxComponent, PrimaryKey, SqlxEvent};
+use bevy_sqlx::{SqlxPlugin, SqlxEvent, SqlxComponent, PrimaryKey};
 
 #[derive(Reflect, Component, FromRow, Debug, Default, Clone)]
 #[allow(unused)]
@@ -140,9 +140,9 @@ impl BarPlugin {
     }
 }
 
-fn handle_trigger<C: SqlxComponent<SqliteRow>> (
-    trigger: Trigger<SqlxEvent<Sqlite, C>>,
-) {
+fn handle_trigger<C: SqlxComponent<SqliteRow>>
+(trigger: Trigger<SqlxEvent<Sqlite, C>>)
+{
     dbg!({ "trigger"; trigger.event().label() });
 }
 

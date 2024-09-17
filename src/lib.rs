@@ -44,8 +44,7 @@
 //! - Wait for [`SqlxTasks`] to finish updating entities
 
 pub mod component;
-pub use self::component::PrimaryKey;
-pub(crate) use self::component::SqlxComponent;
+pub use self::component::*;
 
 mod database;
 pub use self::database::*;

@@ -7,25 +7,6 @@ be performed and data entities to be spawned.
 
 ### Usage
 
-```sh
-DATABASE_URL="sqlite:db/sqlite.db" cargo sqlx database setup
-DATABASE_URL="postgres://localhost/bevy_sqlx" cargo sqlx database setup
-
-# Run the test(s)
-DATABASE_URL="sqlite:db/sqlite.db" cargo test --features sqlx/sqlite
-
-# Run an example with Sqlite
-DATABASE_URL="sqlite:db/sqlite.db" cargo run --example sqlite-minimal \
-    --features sqlx/sqlite,bevy/bevy_winit,bevy/wayland
-
-# Run an example with PostgreSQL
-DATABASE_URL="postgres://localhost/bevy_sqlx" cargo run --example postgres-minimal \
-    --features sqlx/postgres,bevy/bevy_winit,bevy/wayland
-```
-
-
-### Example
-
 ```rust
 use std::env;
 use bevy::prelude::*;
@@ -82,11 +63,11 @@ fn resource(db: Res<SqlxDatabase<Sqlite>>) {
 }
 ```
 
-### Sqlite Example
+### Running the sqlite Example
 
 ![Sqlite Example](./bevy_sqlx.gif)
 
 ```sh
-DATABASE_URL="sqlite:db/sqlite.db" \
-cargo run --example sqlite --features bevy/bevy_winit,bevy/wayland
+cargo run --example sqlite-minimal \
+    --features sqlx/sqlite,bevy/bevy_winit,bevy/wayland
 ```
