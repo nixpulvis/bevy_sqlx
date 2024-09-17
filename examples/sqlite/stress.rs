@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::{app::ScheduleRunnerPlugin, utils::Duration};
 use sqlx::{FromRow, Sqlite};
-use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
+use bevy_sqlx::{SqlxPlugin, PrimaryKey, SqlxEvent};
 
 #[allow(unused_variables, dead_code)]
 #[derive(Component, FromRow, Debug)]
@@ -11,10 +11,10 @@ struct Foo {
     flag: bool,
 }
 
-impl SqlxPrimaryKey for Foo {
+impl PrimaryKey for Foo {
     type Column = u32;
 
-    fn id(&self) -> Self::Column {
+    fn primary_key(&self) -> Self::Column {
         self.id
     }
 }

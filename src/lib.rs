@@ -1,13 +1,64 @@
-mod component;
-pub use self::component::*;
+//! Bevy SQLx is a database plugin for Bevy's ECS which allows for SQL queries
+//! to be performed and data entities to be spawned and managed.
+//!
+//! ### Setup
+//!
+//! - Define a [`Component`](bevy::prelude::Component) with
+//! [`FromRow`](sqlx::FromRow) and [`PrimaryKey`]
+//! - Add the [`SqlxPlugin`] to the [`App`](bevy::prelude::App)
+//!
+//! ### Example
+//!
+//! ```
+//! # use bevy::prelude::*;
+//! # use sqlx::{FromRow, Sqlite};
+//! # use bevy_sqlx::{SqlxPlugin, PrimaryKey};
+//! #
+//! #[derive(Component, FromRow)]
+//! struct MyRecord {
+//!     id: u32,
+//!     flag: bool,
+//!     text: String,
+//! }
+//!
+//! impl PrimaryKey for MyRecord {
+//!     type Column = u32;
+//!
+//!     fn primary_key(&self) -> Self::Column {
+//!         self.id
+//!     }
+//! }
+//!
+//! fn main() {
+//!     let url = "sqlite:db/sqlite.db";
+//!     App::new()
+//!         .add_plugins(DefaultPlugins)
+//!         .add_plugins(SqlxPlugin::<Sqlite, MyRecord>::url(&url))
+//!         .run();
+//! }
+//! ```
+//!
+//! ### Usage
+//!
+//! - Send [`SqlxEvent`] events to query the database
+//! - Wait for [`SqlxTasks`] to finish updating entities
+
+pub mod component;
+pub use self::component::PrimaryKey;
+pub(crate) use self::component::SqlxComponent;
+
 mod database;
 pub use self::database::*;
+
 mod event;
 pub use self::event::*;
+
 mod plugin;
 pub use self::plugin::*;
+
 mod tasks;
 pub use self::tasks::*;
+
 
 #[cfg(test)]
 mod tests {
@@ -23,9 +74,9 @@ mod tests {
         text: String,
     }
 
-    impl SqlxPrimaryKey for Foo {
+    impl PrimaryKey for Foo {
         type Column = u32;
-        fn id(&self) -> Self::Column {
+        fn primary_key(&self) -> Self::Column {
             self.id
         }
     }

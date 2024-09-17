@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::app::ScheduleRunnerPlugin;
 use sqlx::Sqlite;
-use bevy_sqlx::{SqlxPlugin, SqlxDatabase, SqlxDummy};
+use bevy_sqlx::{SqlxPlugin, SqlxDatabase, component::SqlxDummy};
 
 fn main() {
     let mut app= App::new();

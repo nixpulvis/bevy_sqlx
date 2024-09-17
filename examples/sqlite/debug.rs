@@ -3,7 +3,7 @@ use rand::prelude::*;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use sqlx::{FromRow, Sqlite, sqlite::SqliteRow};
-use bevy_sqlx::{SqlxPlugin, SqlxComponent, SqlxPrimaryKey, SqlxEvent};
+use bevy_sqlx::{SqlxPlugin, SqlxComponent, PrimaryKey, SqlxEvent};
 
 #[derive(Reflect, Component, FromRow, Debug, Default, Clone)]
 #[allow(unused)]
@@ -13,10 +13,10 @@ struct Foo {
     flag: bool,
 }
 
-impl SqlxPrimaryKey for Foo {
+impl PrimaryKey for Foo {
     type Column = u32;
 
-    fn id(&self) -> Self::Column {
+    fn primary_key(&self) -> Self::Column {
         self.id
     }
 }
@@ -77,10 +77,10 @@ struct Bar {
     optional: Option<String>,
 }
 
-impl SqlxPrimaryKey for Bar {
+impl PrimaryKey for Bar {
     type Column = u32;
 
-    fn id(&self) -> Self::Column {
+    fn primary_key(&self) -> Self::Column {
         self.id
     }
 }

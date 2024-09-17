@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use sqlx::{FromRow, Postgres};
-use bevy_sqlx::{SqlxPlugin, SqlxPrimaryKey, SqlxEvent};
+use bevy_sqlx::{SqlxPlugin, PrimaryKey, SqlxEvent};
 
 #[derive(Component, FromRow, Debug)]
 #[allow(unused)]
@@ -9,10 +9,10 @@ struct Foo {
     text: String,
 }
 
-impl SqlxPrimaryKey for Foo {
+impl PrimaryKey for Foo {
     type Column = i32;
 
-    fn id(&self) -> Self::Column {
+    fn primary_key(&self) -> Self::Column {
         self.id
     }
 }
