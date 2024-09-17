@@ -1,15 +1,18 @@
 [package]
 name = "bevy_sqlx"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "*", default-features = false, features = ["multi_threaded"] }
-sqlx = { version = "*", features = ["runtime-async-std"] }
+bevy = { version = "0", default-features = false, features = ["multi_threaded"] }
+sqlx = { version = "0", features = ["runtime-async-std"] }
 
 [dev-dependencies]
-rand = "*"
-bevy-inspector-egui = "*"
+rand = "0.8"
+bevy-inspector-egui = "0.25"
+
+
+# Examples
 
 [[example]]
 name = "sqlite-minimal"
