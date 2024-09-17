@@ -28,14 +28,12 @@ fn main() {
 }
 
 fn delete(mut events: EventWriter<SqlxEvent<Postgres, Foo>>) {
-    SqlxEvent::<Postgres, Foo>::query("DELETE FROM foos")
-        .send(&mut events);
+    events.send(SqlxEvent::<Postgres, Foo>::query("DELETE FROM foos"));
 }
 
 fn insert(mut events: EventWriter<SqlxEvent<Postgres, Foo>>) {
     let sql = "INSERT INTO foos(id, text) VALUES (1, 'insert') RETURNING *";
-    SqlxEvent::<Postgres, Foo>::query(sql)
-        .send(&mut events);
+    events.send(SqlxEvent::<Postgres, Foo>::query(sql));
 }
 
 fn query(foos: Query<Ref<Foo>>) {

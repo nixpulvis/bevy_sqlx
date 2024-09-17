@@ -28,14 +28,12 @@ fn main() {
 }
 
 fn delete(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
-    SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos")
-        .send(&mut events);
+    events.send(SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos"));
 }
 
 fn insert(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
     let sql = "INSERT INTO foos(text) VALUES ('insert') RETURNING *";
-    SqlxEvent::<Sqlite, Foo>::query(sql)
-        .send(&mut events);
+    events.send(SqlxEvent::<Sqlite, Foo>::query(sql));
 }
 
 fn query(foos: Query<Ref<Foo>>) {

@@ -64,7 +64,7 @@
 //! # app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(&url));
 //! fn select(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
 //!     let sql = "SELECT * FROM foos";
-//!     SqlxEvent::<Sqlite, Foo>::query(sql).send(&mut events);
+//!     events.send(SqlxEvent::<Sqlite, Foo>::query(sql));
 //! }
 //! ```
 //!
