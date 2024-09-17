@@ -38,14 +38,9 @@ fn main() {
         .run();
 }
 
-fn insert(
-    mut commands: Commands,
-    mut events: EventWriter<SqlxEvent<Sqlite, MyRecord>>,
-) {
+fn insert(mut events: EventWriter<SqlxEvent<Sqlite, MyRecord>>) {
     let sql = "INSERT INTO foos(text) VALUES ('test') RETURNING *";
-    SqlxEvent::<Sqlite, MyRecord>::query(sql)
-        .send(&mut events)
-        .trigger(&mut commands);
+    events.send(SqlxEvent::<Sqlite, MyRecord>::query(sql))
 }
 
 fn query(mut my_records: Query<&MyRecord>) {

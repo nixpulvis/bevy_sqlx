@@ -44,25 +44,25 @@ impl FooPlugin {
         mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
     ) {
         if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyD) {
-            SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos")
-                .send(&mut events)
-                .trigger(&mut commands);
+            events.send(SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos"));
             for (entity, _foo) in foos_query.iter() {
                 commands.entity(entity).despawn_recursive();
             }
         }
 
         if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyI) {
-            SqlxEvent::<Sqlite, Foo>::call(Some("INSERT"), move |db| { async move {
-                let text: String = rand::thread_rng()
-                    .sample_iter(rand::distributions::Alphanumeric)
-                    .take(10)
-                    .map(char::from)
-                    .collect();
-                sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
-                    .bind(text)
-                    .fetch_all(&db).await
-            }}).send(&mut events).trigger(&mut commands);
+            events.send(SqlxEvent::<Sqlite, Foo>::call(Some("INSERT"), move |db| {
+                async move {
+                    let text: String = rand::thread_rng()
+                        .sample_iter(rand::distributions::Alphanumeric)
+                        .take(10)
+                        .map(char::from)
+                        .collect();
+                    sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
+                        .bind(text)
+                        .fetch_all(&db).await
+                }
+            });
         }
 
         if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyS) {

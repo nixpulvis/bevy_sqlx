@@ -33,14 +33,9 @@ use crate::*;
 /// #     type Column = u32;
 /// #     fn primary_key(&self) -> Self::Column { self.0 }
 /// # }
-/// fn insert(
-///     mut commands: Commands,
-///     mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
-/// ) {
+/// fn insert(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
 ///     let sql = "INSERT INTO foos(text) VALUES ('test') RETURNING *";
-///     SqlxEvent::<Sqlite, Foo>::query(sql)
-///         .send(&mut events)
-///         .trigger(&mut commands);
+///     events.send(SqlxEvent::<Sqlite, Foo>::query(sql));
 /// }
 /// ```
 #[derive(Event, Clone)]
@@ -103,28 +98,6 @@ where
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
-    }
-
-    #[deprecated(since="0.1.3", note="please use `events.send` directly")]
-    pub fn send(self, events: &mut EventWriter<SqlxEvent<DB, C>>) -> Self {
-        events.send(SqlxEvent {
-            label: self.label.clone(),
-            func: self.func.clone(),
-            _db: PhantomData::<DB>,
-            _c: PhantomData::<C>,
-        });
-        self
-    }
-
-    #[deprecated(since="0.1.3", note="please use `commands.trigger` directly")]
-    pub fn trigger(self, commands: &mut Commands) -> Self {
-        commands.trigger(SqlxEvent {
-            label: self.label.clone(),
-            func: self.func.clone(),
-            _db: PhantomData::<DB>,
-            _c: PhantomData::<C>,
-        });
-        self
     }
 
     /// A useful message corresponding to this event
