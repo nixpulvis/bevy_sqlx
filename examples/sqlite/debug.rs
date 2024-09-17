@@ -157,9 +157,15 @@ fn main() {
         .run();
 }
 
-fn watch_status(mut statuses: EventReader<SqlxEventStatus<Sqlite, Foo>>) {
-    for status in statuses.read() {
-        dbg!({ "status"; status });
+fn watch_status(
+    mut foo_statuses: EventReader<SqlxEventStatus<Sqlite, Foo>>,
+    mut bar_statuses: EventReader<SqlxEventStatus<Sqlite, Bar>>,
+) {
+    for foo_status in foo_statuses.read() {
+        dbg!({ "Foo status"; foo_status });
+    }
+    for bar_status in bar_statuses.read() {
+        dbg!({ "Bar status"; bar_status });
     }
 }
 
@@ -168,10 +174,10 @@ fn detect_changed(
     bar_query: Query<(Entity, &Bar), Changed<Bar>>,
 ) {
     for foo in &foo_query {
-        dbg!({ "foo changed"; &foo});
+        dbg!({ "Foo changed"; &foo});
     }
     for bar in &bar_query {
-        dbg!({ "bar changed"; &bar});
+        dbg!({ "Bar changed"; &bar});
     }
 }
 
