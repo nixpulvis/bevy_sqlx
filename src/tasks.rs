@@ -73,7 +73,7 @@ where
 
                             if let Some(entity) = existing_entity {
                                 status.send(SqlxEventStatus::
-                                    Insert(task_component.primary_key(),
+                                    Update(task_component.primary_key(),
                                             PhantomData));
                                 commands.entity(entity).insert(task_component);
                             } else {
