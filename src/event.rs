@@ -130,7 +130,6 @@ pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
     Started(Option<String>),
     Spawn(C::Column, PhantomData<DB>),
     Update(C::Column, PhantomData<DB>),
-    // TODO: how to support delete?
     Error(Error),
 }
 
