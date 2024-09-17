@@ -31,7 +31,7 @@ pub struct FooPlugin;
 impl Plugin for FooPlugin {
     fn build(&self, app: &mut App) {
         let url = "sqlite:db/sqlite.db";
-        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
+        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(url));
         app.add_systems(Update, Self::send_foo_events);
     }
 }
@@ -95,7 +95,7 @@ pub struct BarPlugin;
 impl Plugin for BarPlugin {
     fn build(&self, app: &mut App) {
         let url = "sqlite:db/sqlite.db";
-        app.add_plugins(SqlxPlugin::<Sqlite, Bar>::url(&url));
+        app.add_plugins(SqlxPlugin::<Sqlite, Bar>::from_url(&url));
         app.add_systems(Update, Self::send_bar_events);
     }
 }

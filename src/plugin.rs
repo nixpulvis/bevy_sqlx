@@ -21,14 +21,35 @@ pub struct SqlxPlugin<DB: Database, C: SqlxComponent<DB::Row>> {
 }
 
 impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C> {
-    pub fn pool(pool: Pool<DB>) -> Self {
+    /// Build a new plugin directly from the given pool
+    ///
+    /// ```
+    /// use bevy::tasks::block_on;
+    /// use sqlx::{Pool, Sqlite};
+    /// use bevy_sqlx::{SqlxPlugin, SqlxDummy};
+    ///
+    /// let url = "sqlite:db/sqlite.db";
+    /// let pool = block_on(async {
+    ///     Pool::connect(url).await.unwrap()
+    /// });
+    /// SqlxPlugin::<Sqlite, SqlxDummy>::from_pool(pool);
+    /// ```
+    pub fn from_pool(pool: Pool<DB>) -> Self {
         SqlxPlugin {
             pool,
             _c: PhantomData,
         }
     }
 
-    pub fn url(url: &str) -> Self {
+    /// Build a plugin with a new connection from the given `url`
+    ///
+    /// ```
+    /// use sqlx::Sqlite;
+    /// use bevy_sqlx::{SqlxPlugin, SqlxDummy};
+    ///
+    /// SqlxPlugin::<Sqlite, SqlxDummy>::from_url("sqlite:db/sqlite.db");
+    /// ```
+    pub fn from_url(url: &str) -> Self {
         let pool = block_on(async { Pool::connect(url).await.unwrap() });
         SqlxPlugin {
             pool,

@@ -45,7 +45,7 @@ pub trait PrimaryKey {
 pub trait ToRow {}
 
 /// An empty [`Component`] for use without a backing table
-#[derive(Component, FromRow)]
+#[derive(Component, FromRow, Debug, Clone)]
 pub struct SqlxDummy {}
 impl PrimaryKey for SqlxDummy {
     type Column = ();

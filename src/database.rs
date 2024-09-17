@@ -15,7 +15,7 @@ use sqlx::{Database, Pool};
 /// let url = "sqlite:db/sqlite.db";
 /// App::new()
 ///     .add_plugins(DefaultPlugins)
-///     .add_plugins(SqlxPlugin::<Sqlite, SqlxDummy>::url(&url))
+///     .add_plugins(SqlxPlugin::<Sqlite, SqlxDummy>::from_url(&url))
 ///     .add_systems(Startup, resource)
 ///     .run();
 ///

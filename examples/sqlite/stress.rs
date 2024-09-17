@@ -29,7 +29,7 @@ fn main() {
     let url = "sqlite:db/sqlite.db";
     App::new()
         .add_plugins(MinimalPlugins.set(runner))
-        .add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url))
+        .add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(url))
         .insert_resource(ExitTimer(Timer::new(tick_rate * 1000, TimerMode::Once)))
         .add_systems(Startup, (delete, insert.after(delete)))
         .add_systems(Update, (select, update))

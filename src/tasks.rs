@@ -28,12 +28,17 @@ where
     for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
     for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
 {
+    /// An exclusive [`System`] which polls [`Task`]s in [`ResMut<Self>`]
+    ///
+    /// When a task is finished, we check if the component is already spawned:
+    /// - If it is, we just `insert` the new component over the existing one
+    /// - If it isn't, we `spawn` a new entity with the new component
     pub fn handle_tasks(
         world: &mut World,
         params: &mut SystemState<(
             Query<(Entity, Ref<C>)>,
             Commands,
-            ResMut<SqlxTasks<DB, C>>,
+            ResMut<Self>,
             EventWriter<SqlxEventStatus<DB, C>>,
         )>,
     ) {
@@ -85,7 +90,8 @@ where
                         }
                     }
                     Err(err) => {
-                        status.send(SqlxEventStatus::Error(err));
+                        status.send(SqlxEventStatus::
+                            Error(label.clone(), err));
                     }
                 }
             }).is_none()

@@ -21,7 +21,7 @@ fn main() {
     let url = "sqlite:db/sqlite.db";
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url))
+        .add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(url))
         .add_systems(Startup, (delete, insert.after(delete)))
         .add_systems(Update, query)
         .run();

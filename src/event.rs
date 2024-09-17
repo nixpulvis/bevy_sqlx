@@ -1,4 +1,51 @@
-//! B
+//! Both writer [`SqlxEvent`] and reader [`SqlxEventStatus`]
+//!
+//! Sending a single [`SqlxEvent`] will start by sending it's own:
+//! - [`SqlxEventStatus::Start`]
+//!
+//! Then, depending on how the event's task in [`SqlxTasks`] is
+//! processed, one of:
+//! - [`SqlxEventStatus::Spawn`]
+//! - [`SqlxEventStatus::Update`]
+//!
+//!
+//! ### Example
+//!
+//! ```
+//! use bevy::prelude::*;
+//! use sqlx::{FromRow, Sqlite};
+//! use bevy_sqlx::{SqlxPlugin, SqlxEvent, SqlxEventStatus, SqlxDummy};
+//!
+//! let url = "sqlite:db/sqlite.db";
+//! App::new()
+//!     .add_plugins(DefaultPlugins)
+//!     .add_plugins(SqlxPlugin::<Sqlite, SqlxDummy>::from_url(&url))
+//!     .add_systems(Startup, select)
+//!     .add_systems(Update, status)
+//!     .run();
+//!
+//! // Send a single SELECT query.
+//! fn select(
+//!     mut events: EventWriter<SqlxEvent<Sqlite, SqlxDummy>>,
+//! ) {
+//!     SqlxEvent::<Sqlite, SqlxDummy>::query("SELECT * FROM foos")
+//!         .send(&mut events);
+//! }
+//!
+//! // Listen for status events.
+//! fn status(
+//!     mut statuses: EventReader<SqlxEventStatus<Sqlite, SqlxDummy>>,
+//! ) {
+//!     for status in statuses.read() {
+//!         match status {
+//!             SqlxEventStatus::Start(label) => {},
+//!             SqlxEventStatus::Spawn(label, id, _) => {},
+//!             SqlxEventStatus::Update(label, id, _) => {},
+//!             SqlxEventStatus::Error(label, err) => {},
+//!         }
+//!     }
+//! }
+//! ```
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool};
 use sqlx::{Database, Error, Executor, IntoArguments, Pool};
@@ -8,7 +55,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use crate::*;
 
-/// A [`Event`](bevy::prelude::Event) for fetching data from the [`SqlxDatabase`]
+/// An [`Event`] for fetching data from the [`SqlxDatabase`]
 ///
 /// ### Example
 ///
@@ -35,7 +82,7 @@ use crate::*;
 /// let url = "sqlite:db/sqlite.db";
 /// App::new()
 ///     .add_plugins(DefaultPlugins)
-///     .add_plugins(SqlxPlugin::<Sqlite, MyRecord>::url(&url))
+///     .add_plugins(SqlxPlugin::<Sqlite, MyRecord>::from_url(&url))
 ///     .add_systems(Startup, insert)
 ///     .add_systems(Update, query)
 ///     .run();
@@ -59,7 +106,7 @@ use crate::*;
 #[derive(Event, Clone)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
     label: Option<String>,
-    func: SqlxEventFunc<DB, C>,
+    pub(crate) func: SqlxEventFunc<DB, C>,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
@@ -72,6 +119,14 @@ where
     for<'c> &'c mut DB::Connection: Executor<'c, Database = DB>,
     for<'a> <DB as sqlx::Database>::Arguments<'a>: IntoArguments<'a, DB>,
 {
+    /// Construct a new [`SqlxEvent`] from the given SQL string
+    ///
+    /// ```
+    /// use sqlx::Sqlite;
+    /// use bevy_sqlx::{SqlxEvent, SqlxDummy};
+    ///
+    /// SqlxEvent::<Sqlite, SqlxDummy>::query("SELECT * FROM dummys");
+    /// ```
     pub fn query(string: &str) -> Self {
         let arc: Arc<str> = string.into();
         Self::call(Some(string), move |db| {
@@ -82,6 +137,19 @@ where
         })
     }
 
+    /// Construct a new [`SqlxEvent`] from the given function with access
+    /// to a [`Pool<DB>`]
+    ///
+    /// ```
+    /// use sqlx::Sqlite;
+    /// use bevy_sqlx::{SqlxEvent, SqlxDummy};
+    ///
+    /// SqlxEvent::<Sqlite, SqlxDummy>::call(None, move |db| { async move {
+    ///     sqlx::query_as("INSERT INTO dummys (text) VALUES (?) RETURNING *")
+    ///         .bind("hello")
+    ///         .fetch_all(&db).await
+    /// }});
+    /// ```
     pub fn call<F, T>(label: Option<&str>, func: F) -> Self
     where
         F: Fn(Pool<DB>) -> T + Send + Sync + 'static,
@@ -97,6 +165,7 @@ where
         }
     }
 
+    #[deprecated(since="0.1.3", note="please use `events.send` directly")]
     pub fn send(self, events: &mut EventWriter<SqlxEvent<DB, C>>) -> Self {
         events.send(SqlxEvent {
             label: self.label.clone(),
@@ -107,6 +176,7 @@ where
         self
     }
 
+    #[deprecated(since="0.1.3", note="please use `commands.trigger` directly")]
     pub fn trigger(self, commands: &mut Commands) -> Self {
         commands.trigger(SqlxEvent {
             label: self.label.clone(),
@@ -117,28 +187,54 @@ where
         self
     }
 
+    /// A useful message corresponding to this event
     pub fn label(&self) -> Option<String> {
         self.label.clone().map(|s| s.to_string())
     }
-
-    pub(crate) fn func(&self) -> &SqlxEventFunc<DB, C> {
-        &self.func
-    }
 }
 
+
+/// An [`Event`] sent while processing an [`SqlxEvent`]
+///
+/// ### Example
+///
+/// ```
+/// use bevy::prelude::*;
+/// use sqlx::Sqlite;
+/// use bevy_sqlx::{SqlxEventStatus, SqlxDummy};
+///
+/// fn watch_status(
+///     mut statuses: EventReader<SqlxEventStatus<Sqlite, SqlxDummy>>,
+/// ) {
+///     for status in statuses.read() {
+///         match status {
+///             SqlxEventStatus::Start(label) => {},
+///             SqlxEventStatus::Spawn(label, id, _) => {},
+///             SqlxEventStatus::Update(label, id, _) => {},
+///             SqlxEventStatus::Error(label, err) => {},
+///         }
+///     }
+/// }
+/// ```
 #[derive(Event, Debug)]
 pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
-    Started(Option<String>),
+    Start(Option<String>),
     Spawn(Option<String>, C::Column, PhantomData<DB>),
     Update(Option<String>, C::Column, PhantomData<DB>),
-    Error(Error),
+    Error(Option<String>, Error),
 }
+
 
 impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>
 where
     for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
     for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
 {
+    /// A [`System`] which listens for [`Self`] then spawns a new
+    /// [`Task`](bevy::tasks::Task)
+    ///
+    /// Starts by sending a [`SqlxEventStatus::Start`] event, then pushing
+    /// a new [`Task`](bevy::tasks::Task) into [`SqlxTasks`].
     pub fn handle_events(
         database: Res<SqlxDatabase<DB>>,
         mut tasks: ResMut<SqlxTasks<DB, C>>,
@@ -147,9 +243,9 @@ where
     ) {
         let task_pool = AsyncComputeTaskPool::get();
         for event in events.read() {
-            status.send(SqlxEventStatus::Started(event.label()));
+            status.send(SqlxEventStatus::Start(event.label()));
             let db = database.pool.clone();
-            let future = (event.func())(db);
+            let future = (event.func)(db);
             let task = task_pool.spawn(async move { future.await });
             tasks.components.push((event.label(), task));
         }
@@ -183,7 +279,7 @@ mod tests {
         AsyncComputeTaskPool::get_or_init(|| TaskPool::new());
         let url = "sqlite:db/sqlite.db";
         let mut app = App::new();
-        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
+        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(url));
         app
     }
 
@@ -214,7 +310,7 @@ mod tests {
         assert_eq!(1, events.len());
 
         assert_matches!(events.next().unwrap(),
-                        SqlxEventStatus::Started(s) if
+                        SqlxEventStatus::Start(s) if
                             s.clone()
                              .expect("event called with `query`")
                              .contains("INSERT"));

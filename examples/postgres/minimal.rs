@@ -21,7 +21,7 @@ fn main() {
     let url = "postgres://localhost/bevy_sqlx";
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(SqlxPlugin::<Postgres, Foo>::url(url))
+        .add_plugins(SqlxPlugin::<Postgres, Foo>::from_url(url))
         .add_systems(Startup, (delete, insert.after(delete)))
         .add_systems(Update, query)
         .run();

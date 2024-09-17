@@ -34,7 +34,7 @@
 //!     let url = "sqlite:db/sqlite.db";
 //!     App::new()
 //!         .add_plugins(DefaultPlugins)
-//!         .add_plugins(SqlxPlugin::<Sqlite, MyRecord>::url(&url))
+//!         .add_plugins(SqlxPlugin::<Sqlite, MyRecord>::from_url(&url))
 //!         .run();
 //! }
 //! ```
@@ -49,7 +49,6 @@ pub use self::component::*;
 
 pub mod event;
 pub use self::event::*;
-
 mod database;
 pub use self::database::*;
 
@@ -85,7 +84,7 @@ mod tests {
         AsyncComputeTaskPool::get_or_init(|| TaskPool::new());
         let url = "sqlite:db/sqlite.db";
         let mut app = App::new();
-        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
+        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(url));
         app
     }
 
