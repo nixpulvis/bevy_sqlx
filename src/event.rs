@@ -1,3 +1,4 @@
+//! B
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool};
 use sqlx::{Database, Error, Executor, IntoArguments, Pool};
@@ -6,9 +7,6 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use crate::*;
-
-type SqlxEventFunc<DB, C> = Arc<dyn Fn(Pool<DB>) ->
-    Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>> + Send + Sync>;
 
 /// A [`Event`](bevy::prelude::Event) for fetching data from the [`SqlxDatabase`]
 ///
@@ -66,6 +64,9 @@ pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
     _c: PhantomData<C>,
 }
 
+type SqlxEventFunc<DB, C> = Arc<dyn Fn(Pool<DB>) ->
+    Pin<Box<dyn Future<Output = Result<Vec<C>, Error>> + Send>> + Send + Sync>;
+
 impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>
 where
     for<'c> &'c mut DB::Connection: Executor<'c, Database = DB>,
@@ -116,13 +117,21 @@ where
         self
     }
 
-    pub fn label(&self) -> Option<&str> {
-        self.label.as_deref()
+    pub fn label(&self) -> Option<String> {
+        self.label.clone().map(|s| s.to_string())
     }
 
     pub(crate) fn func(&self) -> &SqlxEventFunc<DB, C> {
         &self.func
     }
+}
+
+#[derive(Event, Debug)]
+pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
+    Started(Option<String>),
+    Spawn(Option<String>, C::Column, PhantomData<DB>),
+    Update(Option<String>, C::Column, PhantomData<DB>),
+    Error(Error),
 }
 
 impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>
@@ -134,13 +143,101 @@ where
         database: Res<SqlxDatabase<DB>>,
         mut tasks: ResMut<SqlxTasks<DB, C>>,
         mut events: EventReader<SqlxEvent<DB, C>>,
+        mut status: EventWriter<SqlxEventStatus<DB, C>>,
     ) {
         let task_pool = AsyncComputeTaskPool::get();
         for event in events.read() {
+            status.send(SqlxEventStatus::Started(event.label()));
             let db = database.pool.clone();
             let future = (event.func())(db);
             let task = task_pool.spawn(async move { future.await });
-            tasks.components.push(task);
+            tasks.components.push((event.label(), task));
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::assert_matches::assert_matches;
+    use bevy::prelude::*;
+    use bevy::ecs::system::SystemState;
+    use bevy::tasks::{TaskPool, AsyncComputeTaskPool};
+    use sqlx::{FromRow, Sqlite};
+    use crate::*;
+
+    #[derive(Component, FromRow, Debug)]
+    struct Foo {
+        id: u32,
+        text: String,
+    }
+
+    impl PrimaryKey for Foo {
+        type Column = u32;
+        fn primary_key(&self) -> Self::Column {
+            self.id
+        }
+    }
+
+    fn setup_app() -> App {
+        AsyncComputeTaskPool::get_or_init(|| TaskPool::new());
+        let url = "sqlite:db/sqlite.db";
+        let mut app = App::new();
+        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
+        app
+    }
+
+    #[test]
+    fn test_event_status() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<(
+            Query<&Foo>,
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        )> = SystemState::new(app.world_mut());
+
+        // Sent an event.
+        let sql = "INSERT INTO foos (text) VALUES ('tstevtsts') RETURNING *";
+        let insert = SqlxEvent::<Sqlite, Foo>::query(sql);
+        app.world_mut().send_event(insert);
+
+        // No status events yet.
+        let mut reader = system_state.get(app.world()).1;
+        let events = reader.read();
+        assert_eq!(0, events.len());
+
+        // Update the app once.
+        app.update();
+
+        // We should have a single started event.
+        let mut reader = system_state.get(app.world()).1;
+        let mut events = reader.read();
+        assert_eq!(1, events.len());
+
+        assert_matches!(events.next().unwrap(),
+                        SqlxEventStatus::Started(s) if
+                            s.clone()
+                             .expect("event called with `query`")
+                             .contains("INSERT"));
+
+        // Wait for the task's status event.
+        while no_events(&mut app, &mut system_state) {
+            app.update();
+        }
+
+        // We should now have a single spawned event!
+        let mut reader = system_state.get(app.world()).1;
+        let mut events = reader.read();
+        assert_matches!(events.next().unwrap(),
+                        SqlxEventStatus::Spawn(_,_,_))
+    }
+
+    fn no_events(app: &mut App, system_state: &mut SystemState<(
+        Query<&Foo>,
+        EventReader<SqlxEventStatus<Sqlite, Foo>>,
+    )>) -> bool
+    {
+        let mut reader = system_state.get(app.world()).1;
+        let events = reader.read();
+        events.len() == 0
     }
 }

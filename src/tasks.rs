@@ -10,7 +10,7 @@ use crate::*;
 /// components from the database
 #[derive(Resource, Debug)]
 pub struct SqlxTasks<DB: Database, C: SqlxComponent<DB::Row>> {
-    pub components: Vec<Task<Result<Vec<C>, Error>>>,
+    pub components: Vec<(Option<String>, Task<Result<Vec<C>, Error>>)>,
     _r: PhantomData<DB::Row>,
 }
 
@@ -34,9 +34,11 @@ where
             Query<(Entity, Ref<C>)>,
             Commands,
             ResMut<SqlxTasks<DB, C>>,
+            EventWriter<SqlxEventStatus<DB, C>>,
         )>,
     ) {
-        let (mut query, mut commands, mut tasks) = params.get_mut(world);
+        let (mut query, mut commands, mut tasks, mut status) =
+            params.get_mut(world);
 
         // for (entity, component) in &mut query {
         //     // TODO: Send Encoded UPDATE or callback function?
@@ -47,13 +49,12 @@ where
         //     }
         // }
 
-        tasks.components.retain_mut(|task| {
-            let status = block_on(future::poll_once(task));
-            let retain = status.is_none();
-            if let Some(result) = status {
+        tasks.components.retain_mut(|(label, task)| {
+            block_on(future::poll_once(task)).map(|result| {
                 match result {
                     Ok(task_components) => {
-                        // TODO: Look into world.spawn_batch after taking set disjunction of ids.
+                        // TODO: Look into world.spawn_batch after taking set
+                        // disjunction of ids.
                         for task_component in task_components {
                             // Check if the task's component is already spawned.
                             let mut existing_entity = None;
@@ -67,18 +68,27 @@ where
                             }
 
                             if let Some(entity) = existing_entity {
+                                status.send(SqlxEventStatus::
+                                    Update(
+                                        label.clone(),
+                                        task_component.primary_key(),
+                                        PhantomData));
                                 commands.entity(entity).insert(task_component);
                             } else {
+                                status.send(SqlxEventStatus::
+                                    Spawn(
+                                        label.clone(),
+                                        task_component.primary_key(),
+                                        PhantomData));
                                 commands.spawn(task_component);
                             }
                         }
                     }
                     Err(err) => {
-                        dbg!(err);
+                        status.send(SqlxEventStatus::Error(err));
                     }
                 }
-            }
-            retain
+            }).is_none()
         });
 
         params.apply(world);

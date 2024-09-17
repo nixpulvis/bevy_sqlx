@@ -2,8 +2,13 @@ use std::sync::Arc;
 use rand::prelude::*;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use sqlx::{FromRow, Sqlite, sqlite::SqliteRow};
-use bevy_sqlx::{SqlxPlugin, SqlxEvent, SqlxComponent, PrimaryKey};
+use sqlx::{FromRow, Sqlite};
+use bevy_sqlx::{
+    SqlxPlugin,
+    SqlxEvent,
+    SqlxEventStatus,
+    PrimaryKey,
+};
 
 #[derive(Reflect, Component, FromRow, Debug, Default, Clone)]
 #[allow(unused)]
@@ -28,7 +33,6 @@ impl Plugin for FooPlugin {
         let url = "sqlite:db/sqlite.db";
         app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
         app.add_systems(Update, Self::send_foo_events);
-        app.observe(handle_trigger::<Foo>);
     }
 }
 
@@ -93,7 +97,6 @@ impl Plugin for BarPlugin {
         let url = "sqlite:db/sqlite.db";
         app.add_plugins(SqlxPlugin::<Sqlite, Bar>::url(&url));
         app.add_systems(Update, Self::send_bar_events);
-        app.observe(handle_trigger::<Bar>);
     }
 }
 
@@ -140,12 +143,6 @@ impl BarPlugin {
     }
 }
 
-fn handle_trigger<C: SqlxComponent<SqliteRow>>
-(trigger: Trigger<SqlxEvent<Sqlite, C>>)
-{
-    dbg!({ "trigger"; trigger.event().label() });
-}
-
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -154,34 +151,34 @@ fn main() {
         .add_plugins(BarPlugin)
         .register_type::<Foo>()
         .register_type::<Bar>()
-        .add_systems(Update, (detect_added,
+        .add_systems(Update, (watch_status,
                               detect_changed,
                               detect_removals))
         .run();
 }
 
-macro_rules! dbg_query {
-    ($label:literal, $query:expr) => {{
-        for entity in &mut $query.iter() {
-            dbg!({ $label; &entity });
-        }
-    }}
-}
-
-fn detect_added(
-    foo_query: Query<(Entity, &Foo), Added<Foo>>,
-    bar_query: Query<(Entity, &Bar), Added<Bar>>,
+fn watch_status(
+    mut foo_statuses: EventReader<SqlxEventStatus<Sqlite, Foo>>,
+    mut bar_statuses: EventReader<SqlxEventStatus<Sqlite, Bar>>,
 ) {
-    dbg_query!("foo added", &foo_query);
-    dbg_query!("bar added", &bar_query);
+    for foo_status in foo_statuses.read() {
+        dbg!({ "Foo status"; foo_status });
+    }
+    for bar_status in bar_statuses.read() {
+        dbg!({ "Bar status"; bar_status });
+    }
 }
 
 fn detect_changed(
     foo_query: Query<(Entity, &Foo), Changed<Foo>>,
     bar_query: Query<(Entity, &Bar), Changed<Bar>>,
 ) {
-    dbg_query!("foo changed", &foo_query);
-    dbg_query!("bar changed", &bar_query);
+    for foo in &foo_query {
+        dbg!({ "Foo changed"; &foo});
+    }
+    for bar in &bar_query {
+        dbg!({ "Bar changed"; &bar});
+    }
 }
 
 fn detect_removals(

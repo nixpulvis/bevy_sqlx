@@ -48,6 +48,7 @@ where
         });
         app.insert_resource(SqlxTasks::<DB, C>::default());
         app.add_event::<SqlxEvent<DB, C>>();
+        app.add_event::<SqlxEventStatus<DB, C>>();
         app.add_systems(Update, SqlxEvent::<DB, C>::handle_events);
         app.add_systems(Update, SqlxTasks::<DB, C>::handle_tasks);
     }
