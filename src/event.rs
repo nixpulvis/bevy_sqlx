@@ -7,45 +7,6 @@
 //! processed, one of:
 //! - [`SqlxEventStatus::Spawn`]
 //! - [`SqlxEventStatus::Update`]
-//!
-//!
-//! ### Example
-//!
-//! ```
-//! use bevy::prelude::*;
-//! use sqlx::{FromRow, Sqlite};
-//! use bevy_sqlx::{SqlxPlugin, SqlxEvent, SqlxEventStatus, SqlxDummy};
-//!
-//! let url = "sqlite:db/sqlite.db";
-//! App::new()
-//!     .add_plugins(DefaultPlugins)
-//!     .add_plugins(SqlxPlugin::<Sqlite, SqlxDummy>::from_url(&url))
-//!     .add_systems(Startup, select)
-//!     .add_systems(Update, status)
-//!     .run();
-//!
-//! // Send a single SELECT query.
-//! fn select(
-//!     mut events: EventWriter<SqlxEvent<Sqlite, SqlxDummy>>,
-//! ) {
-//!     SqlxEvent::<Sqlite, SqlxDummy>::query("SELECT * FROM foos")
-//!         .send(&mut events);
-//! }
-//!
-//! // Listen for status events.
-//! fn status(
-//!     mut statuses: EventReader<SqlxEventStatus<Sqlite, SqlxDummy>>,
-//! ) {
-//!     for status in statuses.read() {
-//!         match status {
-//!             SqlxEventStatus::Start(label) => {},
-//!             SqlxEventStatus::Spawn(label, id, _) => {},
-//!             SqlxEventStatus::Update(label, id, _) => {},
-//!             SqlxEventStatus::Error(label, err) => {},
-//!         }
-//!     }
-//! }
-//! ```
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool};
 use sqlx::{Database, Error, Executor, IntoArguments, Pool};
@@ -57,50 +18,29 @@ use crate::*;
 
 /// An [`Event`] for fetching data from the [`SqlxDatabase`]
 ///
+/// When a [`SqlxPlugin`] is added to an app, [`SqlxEvent::handle_events`] is
+/// added too.
+///
 /// ### Example
 ///
 /// ```
-/// use bevy::prelude::*;
-/// use sqlx::{FromRow, Sqlite};
-/// use bevy_sqlx::{SqlxPlugin, PrimaryKey, SqlxEvent};
-///
-/// #[derive(Component, FromRow, Debug)]
-/// struct MyRecord {
-///     id: u32,
-///     flag: bool,
-///     text: String,
-/// }
-///
-/// impl PrimaryKey for MyRecord {
-///     type Column = u32;
-///
-///     fn primary_key(&self) -> Self::Column {
-///         self.id
-///     }
-/// }
-///
-/// let url = "sqlite:db/sqlite.db";
-/// App::new()
-///     .add_plugins(DefaultPlugins)
-///     .add_plugins(SqlxPlugin::<Sqlite, MyRecord>::from_url(&url))
-///     .add_systems(Startup, insert)
-///     .add_systems(Update, query)
-///     .run();
-///
+/// # use bevy::prelude::*;
+/// # use sqlx::{FromRow, Sqlite};
+/// # use bevy_sqlx::{SqlxPlugin, PrimaryKey, SqlxEvent};
+/// # #[derive(Component, FromRow, Debug)]
+/// # struct Foo(u32);
+/// # impl PrimaryKey for Foo {
+/// #     type Column = u32;
+/// #     fn primary_key(&self) -> Self::Column { self.0 }
+/// # }
 /// fn insert(
 ///     mut commands: Commands,
-///     mut events: EventWriter<SqlxEvent<Sqlite, MyRecord>>,
+///     mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
 /// ) {
 ///     let sql = "INSERT INTO foos(text) VALUES ('test') RETURNING *";
-///     SqlxEvent::<Sqlite, MyRecord>::query(sql)
+///     SqlxEvent::<Sqlite, Foo>::query(sql)
 ///         .send(&mut events)
 ///         .trigger(&mut commands);
-/// }
-///
-/// fn query(mut my_records: Query<&MyRecord>) {
-///     for my_record in &my_records {
-///         dbg!(my_record);
-///     }
 /// }
 /// ```
 #[derive(Event, Clone)]
@@ -199,13 +139,10 @@ where
 /// ### Example
 ///
 /// ```
-/// use bevy::prelude::*;
-/// use sqlx::Sqlite;
-/// use bevy_sqlx::{SqlxEventStatus, SqlxDummy};
-///
-/// fn watch_status(
-///     mut statuses: EventReader<SqlxEventStatus<Sqlite, SqlxDummy>>,
-/// ) {
+/// # use bevy::prelude::*;
+/// # use sqlx::Sqlite;
+/// # use bevy_sqlx::{SqlxEventStatus, SqlxDummy};
+/// fn status(mut statuses: EventReader<SqlxEventStatus<Sqlite, SqlxDummy>>) {
 ///     for status in statuses.read() {
 ///         match status {
 ///             SqlxEventStatus::Start(label) => {},
@@ -230,11 +167,12 @@ where
     for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
     for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
 {
-    /// A [`System`] which listens for [`Self`] then spawns a new
-    /// [`Task`](bevy::tasks::Task)
+    /// A [`System`] which listens for [`SqlxEvent`]s and processes them
     ///
-    /// Starts by sending a [`SqlxEventStatus::Start`] event, then pushing
-    /// a new [`Task`](bevy::tasks::Task) into [`SqlxTasks`].
+    /// This system performs the following actions:
+    /// - A [`SqlxEventStatus::Start`] event is sent
+    /// - A new [`Task`](bevy::tasks::Task) for [`SqlxTasks::handle_tasks`]
+    /// is spawned
     pub fn handle_events(
         database: Res<SqlxDatabase<DB>>,
         mut tasks: ResMut<SqlxTasks<DB, C>>,

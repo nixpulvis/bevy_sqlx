@@ -8,6 +8,19 @@ use crate::*;
 
 /// A [`Resource`](bevy::prelude::Resource) of tasks with the resulting
 /// components from the database
+///
+/// ### Example
+///
+/// ```
+/// # use bevy::prelude::*;
+/// # #[derive(Component, Debug)]
+/// # struct Foo;
+/// fn query(mut foos: Query<&Foo>) {
+///     for foo in &foos {
+///         dbg!(foo);
+///     }
+/// }
+/// ```
 #[derive(Resource, Debug)]
 pub struct SqlxTasks<DB: Database, C: SqlxComponent<DB::Row>> {
     pub components: Vec<(Option<String>, Task<Result<Vec<C>, Error>>)>,
@@ -28,7 +41,10 @@ where
     for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
     for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
 {
-    /// An exclusive [`System`] which polls [`Task`]s in [`ResMut<Self>`]
+    /// An exclusive [`System`] which polls [`Task`]s in [`ResMut<SqlxTasks<DB,
+    /// C>>`]
+    ///
+    /// Tasks are spawned in [`SqlxEvent::handle_events`].
     ///
     /// When a task is finished, we check if the component is already spawned:
     /// - If it is, we just `insert` the new component over the existing one

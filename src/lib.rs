@@ -6,9 +6,6 @@
 //!
 //! - Define a [`Component`](bevy::prelude::Component) with
 //! [`FromRow`](sqlx::FromRow) and [`PrimaryKey`]
-//! - Add the [`SqlxPlugin`] to the [`App`](bevy::prelude::App)
-//!
-//! ### Example
 //!
 //! ```
 //! # use bevy::prelude::*;
@@ -26,7 +23,20 @@
 //!     type Column = u32;
 //!     fn primary_key(&self) -> Self::Column { self.id }
 //! }
+//! ```
 //!
+//! - Add the [`SqlxPlugin`] to the [`App`](bevy::prelude::App)
+//!
+//! ```
+//! # use bevy::prelude::*;
+//! # use sqlx::{FromRow, Sqlite};
+//! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, PrimaryKey};
+//! # #[derive(Component, FromRow)]
+//! # struct Foo(u32);
+//! # impl PrimaryKey for Foo {
+//! #     type Column = u32;
+//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! # }
 //! let url = "sqlite:db/sqlite.db";
 //! let app = App::new()
 //!     .add_plugins(DefaultPlugins)
@@ -37,38 +47,75 @@
 //! ### Usage
 //!
 //! - Send [`SqlxEvent`] events to query the database
-//! - Wait for [`SqlxTasks`] to finish updating entities
 //!
 //! ```
 //! # use bevy::prelude::*;
 //! # use sqlx::{FromRow, Sqlite};
 //! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, PrimaryKey};
 //! # #[derive(Component, FromRow)]
-//! # struct Foo {
-//! #     id: u32,
-//! #     flag: bool,
-//! #     text: String,
-//! # }
+//! # struct Foo(u32);
 //! # impl PrimaryKey for Foo {
 //! #     type Column = u32;
-//! #     fn primary_key(&self) -> Self::Column {
-//! #         self.id
-//! #     }
+//! #     fn primary_key(&self) -> Self::Column { self.0 }
 //! # }
-//!
-//! let url = "sqlite:db/sqlite.db";
-//! let mut app = App::new();
-//! app.add_plugins(DefaultPlugins);
-//! app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(&url));
-//!
-//! // SELECT all foos from the database.
-//! let sql = "SELECT * FROM foos";
-//! app.world_mut().send_event(SqlxEvent::<Sqlite, Foo>::query(sql));
-//!
-//! // Run the app
-//! app.run();
+//! # let url = "sqlite:db/sqlite.db";
+//! # let mut app = App::new();
+//! # app.add_plugins(DefaultPlugins);
+//! # app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(&url));
+//! fn select(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
+//!     let sql = "SELECT * FROM foos";
+//!     SqlxEvent::<Sqlite, Foo>::query(sql).send(&mut events);
+//! }
 //! ```
 //!
+//! - Notice the effects of [`SqlxTasks::handle_tasks`]
+//!
+//! ```
+//! # use bevy::prelude::*;
+//! # use sqlx::{FromRow, Sqlite};
+//! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, PrimaryKey};
+//! # #[derive(Component, FromRow, Debug)]
+//! # struct Foo(u32);
+//! # impl PrimaryKey for Foo {
+//! #     type Column = u32;
+//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! # }
+//! # let url = "sqlite:db/sqlite.db";
+//! # let mut app = App::new();
+//! # app.add_plugins(DefaultPlugins);
+//! # app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(&url));
+//! fn query(mut foos: Query<&Foo>) {
+//!     for foo in &foos {
+//!         dbg!(foo);
+//!     }
+//! }
+//! ```
+//!
+//! - Respond to [`SqlxEventStatus`] events
+//!
+//! ```
+//! # use bevy::prelude::*;
+//! # use sqlx::{FromRow, Sqlite};
+//! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, SqlxEventStatus, PrimaryKey};
+//! # #[derive(Component, FromRow)]
+//! # struct Foo(u32);
+//! # impl PrimaryKey for Foo {
+//! #     type Column = u32;
+//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! # }
+//! fn status(
+//!     mut statuses: EventReader<SqlxEventStatus<Sqlite, Foo>>,
+//! ) {
+//!     for status in statuses.read() {
+//!         match status {
+//!             SqlxEventStatus::Start(label) => {},
+//!             SqlxEventStatus::Spawn(label, id, _) => {},
+//!             SqlxEventStatus::Update(label, id, _) => {},
+//!             SqlxEventStatus::Error(label, err) => {},
+//!         }
+//!     }
+//! }
+//! ```
 
 pub mod component;
 pub use self::component::*;
