@@ -2,6 +2,8 @@
 name = "bevy_sqlx"
 version = "0.1.2"
 edition = "2021"
+description = "A SQLx database plugin for Bevy's ECS"
+license = "MIT"
 
 [dependencies]
 bevy = { version = "0", default-features = false, features = ["multi_threaded"] }
