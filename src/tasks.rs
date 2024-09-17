@@ -56,7 +56,6 @@ where
                         // TODO: Look into world.spawn_batch after taking set
                         // disjunction of ids.
                         for task_component in task_components {
-
                             // Check if the task's component is already spawned.
                             let mut existing_entity = None;
                             for (entity, spawned_component) in &mut query {
