@@ -19,6 +19,13 @@ where
 {
 }
 
+#[derive(Component, FromRow)]
+pub struct SqlxDummy {}
+impl SqlxPrimaryKey for SqlxDummy {
+    type Column = ();
+    fn id(&self) {}
+}
+
 #[derive(Resource, Debug)]
 pub struct SqlxDatabase<DB: Database> {
     pub pool: Pool<DB>,

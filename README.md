@@ -72,6 +72,14 @@ fn query(mut my_tables: Query<&MyTable>) {
         dbg(!my_table)
     }
 }
+
+fn resource(db: Res<SqlxDatabase>) {
+    let record = bevy::tasks::block_on(async {
+        sqlx::query!("SELECT (1) as id, 'test' as text")
+            .fetch_one(&db.pool)
+            .await.unwrap()
+    });
+}
 ```
 
 ### Sqlite Example

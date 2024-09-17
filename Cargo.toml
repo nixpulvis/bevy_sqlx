@@ -27,6 +27,11 @@ path = "examples/sqlite/stress.rs"
 required-features = ["sqlx/sqlite"]
 
 [[example]]
+name = "sqlite-resource"
+path = "examples/sqlite/resource.rs"
+required-features = ["sqlx/sqlite"]
+
+[[example]]
 name = "postgres-minimal"
 path = "examples/postgres/minimal.rs"
 required-features = ["sqlx/postgres", "bevy/bevy_winit"]
