@@ -34,9 +34,11 @@ where
             Query<(Entity, Ref<C>)>,
             Commands,
             ResMut<SqlxTasks<DB, C>>,
+            EventWriter<SqlxEventStatus<DB, C>>,
         )>,
     ) {
-        let (mut query, mut commands, mut tasks) = params.get_mut(world);
+        let (mut query, mut commands, mut tasks, mut status) =
+            params.get_mut(world);
 
         // for (entity, component) in &mut query {
         //     // TODO: Send Encoded UPDATE or callback function?
@@ -48,13 +50,16 @@ where
         // }
 
         tasks.components.retain_mut(|task| {
-            let status = block_on(future::poll_once(task));
-            let retain = status.is_none();
-            if let Some(result) = status {
+            let poll = block_on(future::poll_once(task));
+            // TODO refactor to remove this variable
+            let retain = poll.is_none();
+            if let Some(result) = poll {
                 match result {
                     Ok(task_components) => {
-                        // TODO: Look into world.spawn_batch after taking set disjunction of ids.
+                        // TODO: Look into world.spawn_batch after taking set
+                        // disjunction of ids.
                         for task_component in task_components {
+
                             // Check if the task's component is already spawned.
                             let mut existing_entity = None;
                             for (entity, spawned_component) in &mut query {
@@ -67,14 +72,23 @@ where
                             }
 
                             if let Some(entity) = existing_entity {
+                                dbg!("sending insert");
+                                status.send(SqlxEventStatus::
+                                    Insert(task_component.primary_key(),
+                                            PhantomData));
                                 commands.entity(entity).insert(task_component);
                             } else {
+                                dbg!("sending spawn");
+                                status.send(SqlxEventStatus::
+                                    Spawn(task_component.primary_key(),
+                                            PhantomData));
                                 commands.spawn(task_component);
                             }
                         }
                     }
                     Err(err) => {
                         dbg!(err);
+                        status.send(SqlxEventStatus::Error);
                     }
                 }
             }

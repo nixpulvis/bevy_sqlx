@@ -34,7 +34,7 @@ where
 //
 // TODO: Look into impl PartialEq<PrimaryKey<...>> for Foo
 pub trait PrimaryKey {
-    type Column: PartialEq;
+    type Column: Clone + PartialEq + Send + Sync;
     // fn primary_key_name() -> &'static str;
     fn primary_key(&self) -> Self::Column;
 }

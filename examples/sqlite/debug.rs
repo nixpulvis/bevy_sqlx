@@ -3,7 +3,13 @@ use rand::prelude::*;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use sqlx::{FromRow, Sqlite, sqlite::SqliteRow};
-use bevy_sqlx::{SqlxPlugin, SqlxEvent, SqlxComponent, PrimaryKey};
+use bevy_sqlx::{
+    SqlxPlugin,
+    SqlxEvent,
+    SqlxEventStatus,
+    SqlxComponent,
+    PrimaryKey,
+};
 
 #[derive(Reflect, Component, FromRow, Debug, Default, Clone)]
 #[allow(unused)]
@@ -154,10 +160,17 @@ fn main() {
         .add_plugins(BarPlugin)
         .register_type::<Foo>()
         .register_type::<Bar>()
-        .add_systems(Update, (detect_added,
+        .add_systems(Update, (watch_status,
+                              detect_added,
                               detect_changed,
                               detect_removals))
         .run();
+}
+
+fn watch_status(mut statuses: EventReader<SqlxEventStatus<Sqlite, Foo>>) {
+    for status in statuses.read() {
+        dbg!(status);
+    }
 }
 
 macro_rules! dbg_query {
