@@ -1,3 +1,4 @@
+//! B
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool};
 use sqlx::{Database, Error, Executor, IntoArguments, Pool};
@@ -128,8 +129,8 @@ where
 #[derive(Event, Debug)]
 pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
     Started(Option<String>),
-    Spawn(C::Column, PhantomData<DB>),
-    Update(C::Column, PhantomData<DB>),
+    Spawn(Option<String>, C::Column, PhantomData<DB>),
+    Update(Option<String>, C::Column, PhantomData<DB>),
     Error(Error),
 }
 
@@ -150,7 +151,7 @@ where
             let db = database.pool.clone();
             let future = (event.func())(db);
             let task = task_pool.spawn(async move { future.await });
-            tasks.components.push(task);
+            tasks.components.push((event.label(), task));
         }
     }
 }
@@ -227,7 +228,7 @@ mod tests {
         let mut reader = system_state.get(app.world()).1;
         let mut events = reader.read();
         assert_matches!(events.next().unwrap(),
-                        SqlxEventStatus::Spawn(_,_))
+                        SqlxEventStatus::Spawn(_,_,_))
     }
 
     fn no_events(app: &mut App, system_state: &mut SystemState<(

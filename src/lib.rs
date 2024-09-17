@@ -47,11 +47,11 @@
 pub mod component;
 pub use self::component::*;
 
+pub mod event;
+pub use self::event::*;
+
 mod database;
 pub use self::database::*;
-
-mod event;
-pub use self::event::*;
 
 mod plugin;
 pub use self::plugin::*;

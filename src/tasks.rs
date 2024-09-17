@@ -10,7 +10,7 @@ use crate::*;
 /// components from the database
 #[derive(Resource, Debug)]
 pub struct SqlxTasks<DB: Database, C: SqlxComponent<DB::Row>> {
-    pub components: Vec<Task<Result<Vec<C>, Error>>>,
+    pub components: Vec<(Option<String>, Task<Result<Vec<C>, Error>>)>,
     _r: PhantomData<DB::Row>,
 }
 
@@ -49,7 +49,7 @@ where
         //     }
         // }
 
-        tasks.components.retain_mut(|task| {
+        tasks.components.retain_mut(|(label, task)| {
             let poll = block_on(future::poll_once(task));
             // TODO refactor to remove this variable
             let retain = poll.is_none();
@@ -73,13 +73,17 @@ where
 
                             if let Some(entity) = existing_entity {
                                 status.send(SqlxEventStatus::
-                                    Update(task_component.primary_key(),
-                                            PhantomData));
+                                    Update(
+                                        label.clone(),
+                                        task_component.primary_key(),
+                                        PhantomData));
                                 commands.entity(entity).insert(task_component);
                             } else {
                                 status.send(SqlxEventStatus::
-                                    Spawn(task_component.primary_key(),
-                                            PhantomData));
+                                    Spawn(
+                                        label.clone(),
+                                        task_component.primary_key(),
+                                        PhantomData));
                                 commands.spawn(task_component);
                             }
                         }
