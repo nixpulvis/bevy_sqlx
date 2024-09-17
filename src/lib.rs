@@ -1,3 +1,4 @@
+#![feature(assert_matches)]
 //! Bevy SQLx is a database plugin for Bevy's ECS which allows for SQL queries
 //! to be performed and data entities to be spawned and managed.
 //!

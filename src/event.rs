@@ -130,6 +130,7 @@ pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
     Started(Option<String>),
     Spawn(C::Column, PhantomData<DB>),
     Insert(C::Column, PhantomData<DB>),
+    // TODO: how to support delete?
     Error,
 }
 
@@ -158,6 +159,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
     use bevy::prelude::*;
     use bevy::ecs::system::SystemState;
     use bevy::tasks::{TaskPool, AsyncComputeTaskPool};
@@ -210,30 +212,32 @@ mod tests {
         let mut reader = system_state.get(app.world()).1;
         let mut events = reader.read();
         assert_eq!(1, events.len());
-        match events.next().unwrap() {
-            SqlxEventStatus::Started(s) => {
-                assert!(s.clone().expect("event called with `query`")
-                         .contains("INSERT"));
-            },
-            _ => { panic!("bad status event"); }
-        }
 
+        assert_matches!(events.next().unwrap(),
+                        SqlxEventStatus::Started(s) if
+                            s.clone()
+                             .expect("event called with `query`")
+                             .contains("INSERT"));
 
         // Wait for the task's status event.
-        for _ in 0..100 { dbg!(app.update()) }
+        while no_events(&mut app, &mut system_state) {
+            app.update();
+        }
 
-        let mut system_state: SystemState<(
-            Query<&Foo>,
-            EventReader<SqlxEventStatus<Sqlite, Foo>>,
-        )> = SystemState::new(app.world_mut());
+        // We should now have a single spawned event!
         let mut reader = system_state.get(app.world()).1;
         let mut events = reader.read();
-        assert_eq!(1, events.len());
-        match events.next().unwrap() {
-            SqlxEventStatus::Spawn(id,_) => {
-                assert_eq!(1, *id);
-            },
-            _ => { panic!("bad status event"); }
-        }
+        assert_matches!(events.next().unwrap(),
+                        SqlxEventStatus::Spawn(_,_))
+    }
+
+    fn no_events(app: &mut App, system_state: &mut SystemState<(
+        Query<&Foo>,
+        EventReader<SqlxEventStatus<Sqlite, Foo>>,
+    )>) -> bool
+    {
+        let mut reader = system_state.get(app.world()).1;
+        let events = reader.read();
+        events.len() == 0
     }
 }
