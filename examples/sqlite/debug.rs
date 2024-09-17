@@ -146,12 +146,6 @@ impl BarPlugin {
     }
 }
 
-fn handle_trigger<C: SqlxComponent<SqliteRow>>
-(trigger: Trigger<SqlxEvent<Sqlite, C>>)
-{
-    dbg!({ "trigger"; trigger.event().label() });
-}
-
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -161,7 +155,6 @@ fn main() {
         .register_type::<Foo>()
         .register_type::<Bar>()
         .add_systems(Update, (watch_status,
-                              detect_added,
                               detect_changed,
                               detect_removals))
         .run();
@@ -169,8 +162,14 @@ fn main() {
 
 fn watch_status(mut statuses: EventReader<SqlxEventStatus<Sqlite, Foo>>) {
     for status in statuses.read() {
-        dbg!(status);
+        dbg!({ "status"; status });
     }
+}
+
+fn handle_trigger<C: SqlxComponent<SqliteRow>>
+(trigger: Trigger<SqlxEvent<Sqlite, C>>)
+{
+    dbg!({ "observe"; trigger.event().label() });
 }
 
 macro_rules! dbg_query {
@@ -179,14 +178,6 @@ macro_rules! dbg_query {
             dbg!({ $label; &entity });
         }
     }}
-}
-
-fn detect_added(
-    foo_query: Query<(Entity, &Foo), Added<Foo>>,
-    bar_query: Query<(Entity, &Bar), Added<Bar>>,
-) {
-    dbg_query!("foo added", &foo_query);
-    dbg_query!("bar added", &bar_query);
 }
 
 fn detect_changed(

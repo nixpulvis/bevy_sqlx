@@ -72,13 +72,11 @@ where
                             }
 
                             if let Some(entity) = existing_entity {
-                                dbg!("sending insert");
                                 status.send(SqlxEventStatus::
                                     Insert(task_component.primary_key(),
                                             PhantomData));
                                 commands.entity(entity).insert(task_component);
                             } else {
-                                dbg!("sending spawn");
                                 status.send(SqlxEventStatus::
                                     Spawn(task_component.primary_key(),
                                             PhantomData));
@@ -87,6 +85,7 @@ where
                         }
                     }
                     Err(err) => {
+                        // TODO: pass the error
                         dbg!(err);
                         status.send(SqlxEventStatus::Error);
                     }
