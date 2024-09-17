@@ -50,10 +50,7 @@ where
         // }
 
         tasks.components.retain_mut(|(label, task)| {
-            let poll = block_on(future::poll_once(task));
-            // TODO refactor to remove this variable
-            let retain = poll.is_none();
-            if let Some(result) = poll {
+            block_on(future::poll_once(task)).map(|result| {
                 match result {
                     Ok(task_components) => {
                         // TODO: Look into world.spawn_batch after taking set
@@ -92,8 +89,7 @@ where
                         status.send(SqlxEventStatus::Error(err));
                     }
                 }
-            }
-            retain
+            }).is_none()
         });
 
         params.apply(world);
