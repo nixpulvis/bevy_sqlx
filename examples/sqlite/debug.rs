@@ -2,12 +2,11 @@ use std::sync::Arc;
 use rand::prelude::*;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use sqlx::{FromRow, Sqlite, sqlite::SqliteRow};
+use sqlx::{FromRow, Sqlite};
 use bevy_sqlx::{
     SqlxPlugin,
     SqlxEvent,
     SqlxEventStatus,
-    SqlxComponent,
     PrimaryKey,
 };
 
@@ -34,7 +33,6 @@ impl Plugin for FooPlugin {
         let url = "sqlite:db/sqlite.db";
         app.add_plugins(SqlxPlugin::<Sqlite, Foo>::url(url));
         app.add_systems(Update, Self::send_foo_events);
-        app.observe(handle_trigger::<Foo>);
     }
 }
 
@@ -99,7 +97,6 @@ impl Plugin for BarPlugin {
         let url = "sqlite:db/sqlite.db";
         app.add_plugins(SqlxPlugin::<Sqlite, Bar>::url(&url));
         app.add_systems(Update, Self::send_bar_events);
-        app.observe(handle_trigger::<Bar>);
     }
 }
 
@@ -166,26 +163,16 @@ fn watch_status(mut statuses: EventReader<SqlxEventStatus<Sqlite, Foo>>) {
     }
 }
 
-fn handle_trigger<C: SqlxComponent<SqliteRow>>
-(trigger: Trigger<SqlxEvent<Sqlite, C>>)
-{
-    dbg!({ "observe"; trigger.event().label() });
-}
-
-macro_rules! dbg_query {
-    ($label:literal, $query:expr) => {{
-        for entity in &mut $query.iter() {
-            dbg!({ $label; &entity });
-        }
-    }}
-}
-
 fn detect_changed(
     foo_query: Query<(Entity, &Foo), Changed<Foo>>,
     bar_query: Query<(Entity, &Bar), Changed<Bar>>,
 ) {
-    dbg_query!("foo changed", &foo_query);
-    dbg_query!("bar changed", &bar_query);
+    for foo in &foo_query {
+        dbg!({ "foo changed"; &foo});
+    }
+    for bar in &bar_query {
+        dbg!({ "bar changed"; &bar});
+    }
 }
 
 fn detect_removals(

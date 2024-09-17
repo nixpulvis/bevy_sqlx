@@ -125,13 +125,13 @@ where
     }
 }
 
-#[derive(Event, Debug, PartialEq)]
+#[derive(Event, Debug)]
 pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
     Started(Option<String>),
     Spawn(C::Column, PhantomData<DB>),
     Insert(C::Column, PhantomData<DB>),
     // TODO: how to support delete?
-    Error,
+    Error(Error),
 }
 
 impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>

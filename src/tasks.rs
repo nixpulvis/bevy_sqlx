@@ -85,9 +85,7 @@ where
                         }
                     }
                     Err(err) => {
-                        // TODO: pass the error
-                        dbg!(err);
-                        status.send(SqlxEventStatus::Error);
+                        status.send(SqlxEventStatus::Error(err));
                     }
                 }
             }
