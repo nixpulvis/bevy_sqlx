@@ -1,4 +1,5 @@
 #![feature(assert_matches)]
+#![allow(unexpected_cfgs)]
 //! Bevy SQLx is a database plugin for Bevy's ECS which allows for SQL queries
 //! to be performed and data entities to be spawned and managed.
 //!
@@ -132,11 +133,13 @@ mod tasks;
 pub use self::tasks::*;
 
 #[cfg(test)]
+#[cfg(feature = "sqlx/sqlite")]
 mod tests {
     use crate::*;
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
     use bevy::tasks::{AsyncComputeTaskPool, TaskPool};
+    #[cfg(feature = "sqlx/sqlite")]
     use sqlx::{FromRow, Sqlite};
 
     #[derive(Component, FromRow, Debug)]

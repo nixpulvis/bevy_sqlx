@@ -88,6 +88,7 @@ where
 
                                 if let Some(entity) = existing_entity {
                                     status.send(SqlxEventStatus::Update(
+                                        FIXME,
                                         label.clone(),
                                         task_component.primary_key(),
                                         PhantomData,
@@ -97,6 +98,7 @@ where
                                         .insert(task_component);
                                 } else {
                                     status.send(SqlxEventStatus::Spawn(
+                                        FIXME,
                                         label.clone(),
                                         task_component.primary_key(),
                                         PhantomData,
@@ -107,6 +109,7 @@ where
                         }
                         Err(err) => {
                             status.send(SqlxEventStatus::Error(
+                                FIXME,
                                 label.clone(),
                                 err,
                             ));
