@@ -16,6 +16,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 
+/// The type of [`SqlxEvent`] IDs
 pub type SqlxEventId = u32;
 
 pub(crate) const FIXME: u32 = 1337;
@@ -130,10 +131,10 @@ where
 /// fn status(mut statuses: EventReader<SqlxEventStatus<Sqlite, SqlxDummy>>) {
 ///     for status in statuses.read() {
 ///         match status {
-///             SqlxEventStatus::Start(label) => {},
-///             SqlxEventStatus::Spawn(label, id, _) => {},
-///             SqlxEventStatus::Update(label, id, _) => {},
-///             SqlxEventStatus::Error(label, err) => {},
+///             SqlxEventStatus::Start(id, label) => {},
+///             SqlxEventStatus::Spawn(id, label, pk, _) => {},
+///             SqlxEventStatus::Update(id, label, pk, _) => {},
+///             SqlxEventStatus::Error(id, label, err) => {},
 ///         }
 ///     }
 /// }
