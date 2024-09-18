@@ -102,7 +102,7 @@ where
     ///         .fetch_all(&db).await
     /// }});
     /// ```
-    pub fn call<F, T>(label: Option<String>, func: F) -> Self
+    pub fn call<F, T>(label: Option<&str>, func: F) -> Self
     where
         F: Fn(Pool<DB>) -> T + Send + Sync + 'static,
         T: Future<Output = Result<Vec<C>, Error>> + Send + 'static,
@@ -110,7 +110,7 @@ where
         SqlxEvent {
             func: Arc::new(move |db: Pool<DB>| Box::pin(func(db))),
             id: next_event_id(),
-            label,
+            label: label.map(|s| s.to_string()),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
