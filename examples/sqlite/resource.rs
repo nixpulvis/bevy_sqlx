@@ -15,7 +15,7 @@ fn main() {
 
 fn select(db: Res<SqlxDatabase<Sqlite>>) {
     let record = bevy::tasks::block_on(async {
-        sqlx::query!("SELECT (1) as id, 'test' as text")
+        sqlx::query("SELECT (1) as id, 'test' as text")
             .fetch_one(&db.pool)
             .await
             .unwrap()
