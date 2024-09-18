@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::{app::ScheduleRunnerPlugin, utils::Duration};
-use bevy_sqlx::{PrimaryKey, SqlxEvent, SqlxPlugin};
+use bevy_sqlx::{PrimaryKey, SqlxColumn, SqlxEvent, SqlxPlugin};
 use sqlx::{FromRow, Sqlite};
 
 #[allow(unused_variables, dead_code)]
@@ -12,10 +12,8 @@ struct Foo {
 }
 
 impl PrimaryKey for Foo {
-    type Column = u32;
-
-    fn primary_key(&self) -> Self::Column {
-        self.id
+    fn primary_key(&self) -> SqlxColumn {
+        SqlxColumn::new("id", self.id.to_string())
     }
 }
 

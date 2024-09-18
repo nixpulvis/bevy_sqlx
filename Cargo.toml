@@ -35,6 +35,11 @@ path = "examples/sqlite/headless.rs"
 required-features = ["sqlx/sqlite"]
 
 [[example]]
+name = "sqlite-spawn"
+path = "examples/sqlite/spawn.rs"
+required-features = ["sqlx/sqlite"]
+
+[[example]]
 name = "sqlite-resource"
 path = "examples/sqlite/resource.rs"
 required-features = ["sqlx/sqlite"]

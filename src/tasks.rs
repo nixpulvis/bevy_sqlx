@@ -52,7 +52,7 @@ where
             Query<(Entity, Ref<C>)>,
             Commands,
             ResMut<Self>,
-            EventWriter<SqlxEventStatus<C>>,
+            EventWriter<SqlxEventStatus>,
         )>,
     ) {
         let (mut query, mut commands, mut tasks, mut status) =

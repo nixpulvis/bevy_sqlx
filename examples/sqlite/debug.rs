@@ -14,10 +14,8 @@ struct Foo {
 }
 
 impl PrimaryKey for Foo {
-    type Column = u32;
-
-    fn primary_key(&self) -> Self::Column {
-        self.id
+    fn primary_key(&self) -> SqlxPrmaryKey {
+        SqlxPrimaryKey::new("id", self.id)
     }
 }
 
@@ -83,10 +81,8 @@ struct Bar {
 }
 
 impl PrimaryKey for Bar {
-    type Column = u32;
-
     fn primary_key(&self) -> Self::Column {
-        self.id
+        SqlxPrimaryKey::new("id", self.id)
     }
 }
 

@@ -10,10 +10,8 @@ struct Foo {
 }
 
 impl PrimaryKey for Foo {
-    type Column = i32;
-
     fn primary_key(&self) -> Self::Column {
-        self.id
+        SqlxPrimaryKey::new("id", self.id)
     }
 }
 

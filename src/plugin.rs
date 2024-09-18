@@ -1,7 +1,8 @@
+use crate::component::ToRow;
 use crate::*;
 use bevy::prelude::*;
 use bevy::tasks::block_on;
-use sqlx::{Database, Executor, IntoArguments, Pool};
+use sqlx::{Database, Encode, Executor, IntoArguments, Pool, Type};
 use std::marker::PhantomData;
 
 /// A [`Plugin`](bevy::prelude::Plugin) to add to an
@@ -57,13 +58,38 @@ impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> Plugin
 where
     for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
     for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
+    String: for<'q> Encode<'q, DB> + Type<DB>,
 {
     fn build(&self, app: &mut App) {
         app.insert_resource(SqlxDatabase { pool: self.pool.clone() });
         app.insert_resource(SqlxTasks::<DB, C>::default());
         app.add_event::<SqlxEvent<DB, C>>();
-        app.add_event::<SqlxEventStatus<C>>();
+        app.add_event::<SqlxEventStatus>();
         app.add_systems(Update, SqlxEvent::<DB, C>::handle_events);
         app.add_systems(Update, SqlxTasks::<DB, C>::handle_tasks);
+        app.add_systems(Update, handle_entities::<DB, C>);
+    }
+}
+
+fn handle_entities<DB: Database + Sync, C: SqlxComponent<DB::Row>>(
+    query: Query<(Entity, &C), Changed<C>>,
+    mut events: EventWriter<SqlxEvent<DB, C>>,
+) where
+    for<'c> &'c mut DB::Connection: Executor<'c, Database = DB>,
+    for<'a> <DB as sqlx::Database>::Arguments<'a>: IntoArguments<'a, DB>,
+    String: for<'q> Encode<'q, DB> + Type<DB>,
+{
+    for (entity, component) in &query {
+        dbg!({
+            "changed";
+            component.to_row()
+        });
+        let event = SqlxEvent::<DB, C>::call(None, move |db| async move {
+            sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
+                .bind("hello".to_string())
+                .fetch_all(&db)
+                .await
+        });
+        events.send(event);
     }
 }
