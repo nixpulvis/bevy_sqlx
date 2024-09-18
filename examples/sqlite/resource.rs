@@ -4,7 +4,7 @@ use bevy_sqlx::{component::SqlxDummy, SqlxDatabase, SqlxPlugin};
 use sqlx::Sqlite;
 
 fn main() {
-    let app = App::new()
+    App::new()
         .add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_once()))
         .add_plugins(SqlxPlugin::<Sqlite, SqlxDummy>::from_url(
             "sqlite:db/sqlite.db",
