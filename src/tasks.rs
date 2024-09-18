@@ -58,35 +58,26 @@ where
         let (mut query, mut commands, mut tasks, mut status) =
             params.get_mut(world);
 
-        // for (entity, component) in &mut query {
-        //     // TODO: Send Encoded UPDATE or callback function?
-        //     // TODO: Need a dirty bit to check so we don't send just
-        //     //       received updated entities.
-        //     if component.is_changed() && !component.is_added() {
-        //         dbg!("TODO: UPDATE");
-        //     }
-        // }
-
         tasks.components.retain_mut(|(id, sync, task)| {
             block_on(future::poll_once(task))
                 .map(|result| {
                     match result {
                         Ok(task_components) => {
-                            // TODO: Look into world.spawn_batch after taking set
-                            // disjunction of ids.
-                            for task_component in task_components {
-                                // Check if the task's component is already spawned.
-                                let mut existing_entity = None;
-                                for (entity, spawned_component) in &mut query {
-                                    if task_component.primary_key()
-                                        == spawned_component.primary_key()
+                            if *sync {
+                                for task_component in task_components {
+                                    // Check if the task's component is already spawned.
+                                    let mut existing_entity = None;
+                                    for (entity, spawned_component) in
+                                        &mut query
                                     {
-                                        existing_entity = Some(entity);
-                                        break;
+                                        if task_component.primary_key()
+                                            == spawned_component.primary_key()
+                                        {
+                                            existing_entity = Some(entity);
+                                            break;
+                                        }
                                     }
-                                }
 
-                                if *sync {
                                     if let Some(entity) = existing_entity {
                                         status.send(SqlxEventStatus::Update(
                                             *id,
@@ -102,14 +93,16 @@ where
                                             task_component.primary_key(),
                                             PhantomData,
                                         ));
+                                        // TODO: Look into world.spawn_batch
+                                        // after taking set disjunction of ids.
                                         commands.spawn(task_component);
                                     }
-                                } else {
-                                    status.send(SqlxEventStatus::Return(
-                                        *id,
-                                        task_component,
-                                    ));
                                 }
+                            } else {
+                                status.send(SqlxEventStatus::Return(
+                                    *id,
+                                    task_components,
+                                ));
                             }
                         }
                         Err(err) => {

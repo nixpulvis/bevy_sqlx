@@ -191,7 +191,7 @@ where
 #[derive(Event, Debug)]
 pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
     Start(SqlxEventId),
-    Return(SqlxEventId, C),
+    Return(SqlxEventId, Vec<C>),
     Spawn(SqlxEventId, C::Column, PhantomData<DB>),
     Update(SqlxEventId, C::Column, PhantomData<DB>),
     Error(SqlxEventId, Error),
@@ -269,96 +269,214 @@ mod tests {
 
     fn no_events(
         app: &mut App,
-        system_state: &mut SystemState<(
-            Query<&Foo>,
+        system_state: &mut SystemState<
             EventReader<SqlxEventStatus<Sqlite, Foo>>,
-        )>,
+        >,
     ) -> bool {
-        let mut reader = system_state.get(app.world()).1;
+        let mut reader = system_state.get(app.world());
         let events = reader.read();
         events.len() == 0
     }
 
+    fn wait_for_event(
+        mut app: &mut App,
+        mut system_state: &mut SystemState<
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        >,
+    ) {
+        while no_events(&mut app, &mut system_state) {
+            app.update();
+        }
+    }
+
+    fn skip_started_event(
+        mut app: &mut App,
+        mut system_state: &mut SystemState<
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        >,
+    ) {
+        while no_events(&mut app, &mut system_state) {
+            app.update();
+        }
+        let mut reader = system_state.get(app.world());
+        let mut events = reader.read();
+        assert_matches!(events.next().unwrap(), SqlxEventStatus::Start(_));
+    }
+
     #[test]
-    fn test_event_status() {
+    fn test_query() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        > = SystemState::new(app.world_mut());
+
+        let sql = "INSERT INTO foos (text) VALUES ('query') RETURNING *";
+        let insert = SqlxEvent::<Sqlite, Foo>::query(sql);
+        app.world_mut().send_event(insert);
+
+        skip_started_event(&mut app, &mut system_state);
+        wait_for_event(&mut app, &mut system_state);
+
+        let mut reader = system_state.get(app.world());
+        let mut events = reader.read();
+        assert_matches!(events.next().unwrap(),
+            SqlxEventStatus::Return(_, components)
+                if components[0].text == "query");
+    }
+
+    #[test]
+    fn test_query_sync() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<Query<&Foo>> =
+            SystemState::new(app.world_mut());
+
+        let sql = "INSERT INTO foos (text) VALUES ('query_sync') RETURNING *";
+        let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
+        app.world_mut().send_event(insert);
+
+        let mut tries = 0;
+        let mut len = system_state.get(app.world()).iter().len();
+        while !(len > 0) && tries < 1000 {
+            app.update();
+            len = system_state.get(app.world()).iter().len();
+            tries += 1;
+        }
+
+        let query = system_state.get(app.world());
+        assert_eq!("query_sync", query.single().text);
+    }
+
+    #[test]
+    fn test_call_sync() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<Query<&Foo>> =
+            SystemState::new(app.world_mut());
+
+        let text = "call_sync";
+        let insert =
+            SqlxEvent::<Sqlite, Foo>::call_sync(move |db| async move {
+                sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
+                    .bind(text)
+                    .fetch_all(&db)
+                    .await
+            });
+        app.world_mut().send_event(insert);
+
+        let mut tries = 0;
+        let mut len = system_state.get(app.world()).iter().len();
+        while !(len > 0) && tries < 1000 {
+            app.update();
+            len = system_state.get(app.world()).iter().len();
+            tries += 1;
+        }
+
+        let query = system_state.get(app.world());
+        assert_eq!(text, query.single().text);
+    }
+
+    #[test]
+    fn test_event_status_started() {
         let mut app = setup_app();
         let mut system_state: SystemState<(
             Query<&Foo>,
             EventReader<SqlxEventStatus<Sqlite, Foo>>,
         )> = SystemState::new(app.world_mut());
 
-        // Send an event.
-        let sql = "INSERT INTO foos (text) VALUES ('tstevtsts') RETURNING *";
+        let sql = "INSERT INTO foos (text) VALUES ('spawn') RETURNING *";
         let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
         app.world_mut().send_event(insert);
 
-        // No status events yet.
         let mut reader = system_state.get(app.world()).1;
         let events = reader.read();
         assert_eq!(0, events.len());
 
-        // Update the app once.
         app.update();
 
-        // We should have a single started event.
         let mut reader = system_state.get(app.world()).1;
         let mut events = reader.read();
         assert_eq!(1, events.len());
         assert_matches!(events.next().unwrap(), SqlxEventStatus::Start(_));
+    }
 
-        // Wait for the task's status event.
-        while no_events(&mut app, &mut system_state) {
-            app.update();
-        }
+    #[test]
+    fn test_event_status_spawn() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        > = SystemState::new(app.world_mut());
 
-        // We should now have a single spawned event!
-        let mut reader = system_state.get(app.world()).1;
+        let sql = "INSERT INTO foos (text) VALUES ('spawn') RETURNING *";
+        let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
+        app.world_mut().send_event(insert);
+
+        skip_started_event(&mut app, &mut system_state);
+        wait_for_event(&mut app, &mut system_state);
+
+        let mut reader = system_state.get(app.world());
         let mut events = reader.read();
         assert_matches!(events.next().unwrap(), SqlxEventStatus::Spawn(_, _, _))
     }
 
     #[test]
+    fn test_event_status_update() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        > = SystemState::new(app.world_mut());
+
+        app.world_mut().spawn(Foo { id: 1, text: "update".into() });
+
+        // let sql = r#"
+        //     IF NOT EXISTS (SELECT * FROM foos WHERE id = 1)
+        //         INSERT INTO foos (text)
+        //         VALUES ('update')
+        //     ELSE
+        //         UPDATE foos
+        //         SET text = 'update'
+        //         WHERE id = 1
+        // "#;
+        let sql = r#"
+            INSERT INTO foos (id, text) VALUES (1, 'return')
+            ON CONFLICT(id) DO UPDATE
+            SET text = 'update'
+            RETURNING *
+        "#;
+        let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
+        app.world_mut().send_event(insert);
+
+        skip_started_event(&mut app, &mut system_state);
+        wait_for_event(&mut app, &mut system_state);
+
+        let mut reader = system_state.get(app.world());
+        let mut events = reader.read();
+        assert_matches!(
+            events.next().unwrap(),
+            SqlxEventStatus::Update(_, _, _)
+        )
+    }
+
+    #[test]
     fn test_event_status_return() {
         let mut app = setup_app();
-        let mut system_state: SystemState<(
-            Query<&Foo>,
+        let mut system_state: SystemState<
             EventReader<SqlxEventStatus<Sqlite, Foo>>,
-        )> = SystemState::new(app.world_mut());
+        > = SystemState::new(app.world_mut());
 
-        // Send an event.
         let sql = "INSERT INTO foos (text) VALUES ('return') RETURNING *";
         let insert = SqlxEvent::<Sqlite, Foo>::query(sql);
         app.world_mut().send_event(insert);
 
-        // No status events yet.
-        let mut reader = system_state.get(app.world()).1;
-        let events = reader.read();
-        assert_eq!(0, events.len());
+        skip_started_event(&mut app, &mut system_state);
+        wait_for_event(&mut app, &mut system_state);
 
-        // Update the app once.
-        app.update();
-
-        // We should have a single started event.
-        let mut reader = system_state.get(app.world()).1;
-        let mut events = reader.read();
-        assert_eq!(1, events.len());
-        let start = events.next().unwrap();
-        let start_id = start.id();
-        assert_matches!(start, SqlxEventStatus::Start(_));
-
-        // Wait for the task's status event.
-        while no_events(&mut app, &mut system_state) {
-            app.update();
-        }
-
-        // We should now have a single spawned event!
-        let mut reader = system_state.get(app.world()).1;
+        let mut reader = system_state.get(app.world());
         let mut events = reader.read();
         assert_matches!(
             events.next().unwrap(),
-            SqlxEventStatus::Return(return_id, component) if
-                *return_id == start_id &&
-                component.text == "return"
+            SqlxEventStatus::Return(_, components) if
+                components[0].text == "return"
         )
     }
+
+    // TODO: Add tests for multicurrent in-flight events (w/ IDs)
 }
