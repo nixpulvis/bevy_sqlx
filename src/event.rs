@@ -116,7 +116,7 @@ where
         }
     }
 
-    /// TODO
+    /// Return the id of this event
     pub fn id(&self) -> SqlxEventId {
         self.id
     }
