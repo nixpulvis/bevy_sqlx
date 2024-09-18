@@ -10,7 +10,7 @@
 use crate::*;
 use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
-use sqlx::{Database, Error, Executor, IntoArguments, Pool};
+use sqlx::{Database, Error, Executor, FromRow, IntoArguments, Pool};
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -51,7 +51,7 @@ pub fn next_event_id() -> SqlxEventId {
 /// }
 /// ```
 #[derive(Event, Clone)]
-pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
+pub struct SqlxEvent<DB: Database, C: for<'r> FromRow<'r, DB::Row>> {
     pub(crate) func: SqlxEventFunc<DB, C>,
     id: SqlxEventId,
     will_sync: bool,
@@ -68,7 +68,10 @@ type SqlxEventFunc<DB, C> = Arc<
         + Sync,
 >;
 
-impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>
+impl<
+        DB: Database + Sync,
+        C: for<'r> FromRow<'r, DB::Row> + Send + Sync + Unpin,
+    > SqlxEvent<DB, C>
 where
     for<'c> &'c mut DB::Connection: Executor<'c, Database = DB>,
     for<'a> <DB as sqlx::Database>::Arguments<'a>: IntoArguments<'a, DB>,
@@ -189,27 +192,30 @@ where
 /// }
 /// ```
 #[derive(Event, Debug)]
-pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
+pub enum SqlxEventStatus<DB: Database, C: for<'r> FromRow<'r, DB::Row>> {
     Start(SqlxEventId),
-    Return(SqlxEventId, Vec<C>),
-    Spawn(SqlxEventId, C::Column, PhantomData<DB>),
-    Update(SqlxEventId, C::Column, PhantomData<DB>),
+    Return(SqlxEventId, Vec<C>, PhantomData<DB>),
+    // Spawn(SqlxEventId, C::Column, PhantomData<DB>),
+    // Update(SqlxEventId, C::Column, PhantomData<DB>),
     Error(SqlxEventId, Error),
 }
 
-impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxEventStatus<DB, C> {
+impl<DB: Database, C: for<'r> FromRow<'r, DB::Row>> SqlxEventStatus<DB, C> {
     pub fn id(&self) -> SqlxEventId {
         match *self {
             SqlxEventStatus::Start(id)
-            | SqlxEventStatus::Return(id, _)
-            | SqlxEventStatus::Spawn(id, _, _)
-            | SqlxEventStatus::Update(id, _, _)
+            | SqlxEventStatus::Return(id, _, _)
+            // | SqlxEventStatus::Spawn(id, _, _)
+            // | SqlxEventStatus::Update(id, _, _)
             | SqlxEventStatus::Error(id, _) => id,
         }
     }
 }
 
-impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>
+impl<
+        DB: Database + Sync,
+        C: for<'r> FromRow<'r, DB::Row> + Send + Sync + Unpin + 'static,
+    > SqlxEvent<DB, C>
 where
     for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
     for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
@@ -228,7 +234,7 @@ where
     ) {
         let task_pool = AsyncComputeTaskPool::get();
         for event in events.read() {
-            status.send(SqlxEventStatus::Start(event.id()));
+            status.send(SqlxEventStatus::<DB, C>::Start(event.id()));
             let db = database.pool.clone();
             let future = (event.func)(db);
             let task = task_pool.spawn(async move { future.await });
@@ -264,6 +270,11 @@ mod tests {
         let url = "sqlite:db/sqlite.db";
         let mut app = App::new();
         app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(url));
+        let db = app.world().get_resource::<SqlxDatabase<Sqlite>>();
+        bevy::tasks::block_on(async {
+            sqlx::query("DELETE FROM bars").execute(&db.pool).await.unwrap();
+            sqlx::query("DELETE FROM foos").execute(&db.pool).await.unwrap();
+        });
         app
     }
 
@@ -320,7 +331,7 @@ mod tests {
         let mut reader = system_state.get(app.world());
         let mut events = reader.read();
         assert_matches!(events.next().unwrap(),
-            SqlxEventStatus::Return(_, components)
+            SqlxEventStatus::Return(_, components, _)
                 if components[0].text == "query");
     }
 
@@ -398,62 +409,62 @@ mod tests {
         assert_matches!(events.next().unwrap(), SqlxEventStatus::Start(_));
     }
 
-    #[test]
-    fn test_event_status_spawn() {
-        let mut app = setup_app();
-        let mut system_state: SystemState<
-            EventReader<SqlxEventStatus<Sqlite, Foo>>,
-        > = SystemState::new(app.world_mut());
+    // #[test]
+    // fn test_event_status_spawn() {
+    //     let mut app = setup_app();
+    //     let mut system_state: SystemState<
+    //         EventReader<SqlxEventStatus<Sqlite, Foo>>,
+    //     > = SystemState::new(app.world_mut());
 
-        let sql = "INSERT INTO foos (text) VALUES ('spawn') RETURNING *";
-        let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
-        app.world_mut().send_event(insert);
+    //     let sql = "INSERT INTO foos (text) VALUES ('spawn') RETURNING *";
+    //     let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
+    //     app.world_mut().send_event(insert);
 
-        skip_started_event(&mut app, &mut system_state);
-        wait_for_event(&mut app, &mut system_state);
+    //     skip_started_event(&mut app, &mut system_state);
+    //     wait_for_event(&mut app, &mut system_state);
 
-        let mut reader = system_state.get(app.world());
-        let mut events = reader.read();
-        assert_matches!(events.next().unwrap(), SqlxEventStatus::Spawn(_, _, _))
-    }
+    //     let mut reader = system_state.get(app.world());
+    //     let mut events = reader.read();
+    //     assert_matches!(events.next().unwrap(), SqlxEventStatus::Spawn(_, _, _))
+    // }
 
-    #[test]
-    fn test_event_status_update() {
-        let mut app = setup_app();
-        let mut system_state: SystemState<
-            EventReader<SqlxEventStatus<Sqlite, Foo>>,
-        > = SystemState::new(app.world_mut());
+    // #[test]
+    // fn test_event_status_update() {
+    //     let mut app = setup_app();
+    //     let mut system_state: SystemState<
+    //         EventReader<SqlxEventStatus<Sqlite, Foo>>,
+    //     > = SystemState::new(app.world_mut());
 
-        app.world_mut().spawn(Foo { id: 1, text: "update".into() });
+    //     app.world_mut().spawn(Foo { id: 1, text: "update".into() });
 
-        // let sql = r#"
-        //     IF NOT EXISTS (SELECT * FROM foos WHERE id = 1)
-        //         INSERT INTO foos (text)
-        //         VALUES ('update')
-        //     ELSE
-        //         UPDATE foos
-        //         SET text = 'update'
-        //         WHERE id = 1
-        // "#;
-        let sql = r#"
-            INSERT INTO foos (id, text) VALUES (1, 'return')
-            ON CONFLICT(id) DO UPDATE
-            SET text = 'update'
-            RETURNING *
-        "#;
-        let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
-        app.world_mut().send_event(insert);
+    //     // let sql = r#"
+    //     //     IF NOT EXISTS (SELECT * FROM foos WHERE id = 1)
+    //     //         INSERT INTO foos (text)
+    //     //         VALUES ('update')
+    //     //     ELSE
+    //     //         UPDATE foos
+    //     //         SET text = 'update'
+    //     //         WHERE id = 1
+    //     // "#;
+    //     let sql = r#"
+    //         INSERT INTO foos (id, text) VALUES (1, 'return')
+    //         ON CONFLICT(id) DO UPDATE
+    //         SET text = 'update'
+    //         RETURNING *
+    //     "#;
+    //     let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
+    //     app.world_mut().send_event(insert);
 
-        skip_started_event(&mut app, &mut system_state);
-        wait_for_event(&mut app, &mut system_state);
+    //     skip_started_event(&mut app, &mut system_state);
+    //     wait_for_event(&mut app, &mut system_state);
 
-        let mut reader = system_state.get(app.world());
-        let mut events = reader.read();
-        assert_matches!(
-            events.next().unwrap(),
-            SqlxEventStatus::Update(_, _, _)
-        )
-    }
+    //     let mut reader = system_state.get(app.world());
+    //     let mut events = reader.read();
+    //     assert_matches!(
+    //         events.next().unwrap(),
+    //         SqlxEventStatus::Update(_, _, _)
+    //     )
+    // }
 
     #[test]
     fn test_event_status_return() {
@@ -473,7 +484,7 @@ mod tests {
         let mut events = reader.read();
         assert_matches!(
             events.next().unwrap(),
-            SqlxEventStatus::Return(_, components) if
+            SqlxEventStatus::Return(_, components, _) if
                 components[0].text == "return"
         )
     }

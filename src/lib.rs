@@ -119,8 +119,8 @@
 //! }
 //! ```
 
-pub mod component;
-pub use self::component::*;
+// pub mod component;
+// pub use self::component::*;
 
 pub mod event;
 pub use self::event::*;

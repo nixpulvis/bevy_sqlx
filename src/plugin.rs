@@ -1,7 +1,7 @@
 use crate::*;
 use bevy::prelude::*;
 use bevy::tasks::block_on;
-use sqlx::{Database, Executor, IntoArguments, Pool};
+use sqlx::{Database, Executor, FromRow, IntoArguments, Pool};
 use std::marker::PhantomData;
 
 /// A [`Plugin`](bevy::prelude::Plugin) to add to an
@@ -15,12 +15,19 @@ use std::marker::PhantomData;
 /// - A [`SqlxTasks<DB, C>::handle_tasks`] system
 //
 // TODO: test multiple of these at once
-pub struct SqlxPlugin<DB: Database, C: SqlxComponent<DB::Row>> {
+pub struct SqlxPlugin<
+    DB: Database,
+    C: for<'r> FromRow<'r, DB::Row> + Send + Sync + Unpin + 'static,
+> {
     pool: Pool<DB>,
     _c: PhantomData<C>,
 }
 
-impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C> {
+impl<
+        DB: Database,
+        C: for<'r> FromRow<'r, DB::Row> + Send + Sync + Unpin + 'static,
+    > SqlxPlugin<DB, C>
+{
     /// Build a new plugin directly from the given pool
     ///
     /// ```
@@ -52,8 +59,10 @@ impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C> {
     }
 }
 
-impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> Plugin
-    for SqlxPlugin<DB, C>
+impl<
+        DB: Database + Sync,
+        C: for<'r> FromRow<'r, DB::Row> + Send + Sync + Unpin + 'static,
+    > Plugin for SqlxPlugin<DB, C>
 where
     for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
     for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
