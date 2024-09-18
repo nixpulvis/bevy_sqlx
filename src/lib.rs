@@ -190,9 +190,6 @@ mod tests {
         let mut system_state: SystemState<Query<&Foo>> =
             SystemState::new(app.world_mut());
 
-        // let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
-        // app.world_mut().send_event(delete);
-
         let text = "test callback";
         let insert =
             SqlxEvent::<Sqlite, Foo>::call_sync(move |db| async move {
