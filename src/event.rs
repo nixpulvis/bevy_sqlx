@@ -147,10 +147,10 @@ where
 /// }
 /// ```
 #[derive(Event, Debug)]
-pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
+pub enum SqlxEventStatus<PC: PrimaryKey> {
     Start(SqlxEventId, Option<String>),
-    Spawn(SqlxEventId, Option<String>, C::Column, PhantomData<DB>),
-    Update(SqlxEventId, Option<String>, C::Column, PhantomData<DB>),
+    Spawn(SqlxEventId, Option<String>, PC::Column),
+    Update(SqlxEventId, Option<String>, PC::Column),
     Error(SqlxEventId, Option<String>, Error),
 }
 
@@ -169,7 +169,7 @@ where
         database: Res<SqlxDatabase<DB>>,
         mut tasks: ResMut<SqlxTasks<DB, C>>,
         mut events: EventReader<SqlxEvent<DB, C>>,
-        mut status: EventWriter<SqlxEventStatus<DB, C>>,
+        mut status: EventWriter<SqlxEventStatus<C>>,
     ) {
         let task_pool = AsyncComputeTaskPool::get();
         for event in events.read() {

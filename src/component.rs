@@ -18,40 +18,38 @@
 //!
 //! TODO: Explain `ToRow` and `FromRow` here.
 use bevy::prelude::*;
-use sqlx::{Database, FromRow, Row};
-use std::marker::PhantomData;
+use sqlx::{FromRow, Row};
+
+// /// Rows in the database represent a spesifc [`Component`]
+// pub trait SqlxComponent<R: Row>:
+//     Component + for<'r> FromRow<'r, R> + Unpin
+// {
+//     type Column: Clone + PartialEq + Send + Sync;
+//     // fn primary_key_name() -> &'static str;
+//     fn primary_key(&self) -> Self::Column;
+// }
 
 /// Rows in the database represent a spesifc [`Component`]
 pub trait SqlxComponent<R: Row>:
-    Component + for<'r> FromRow<'r, R> + Unpin
+    PrimaryKey + Component + for<'r> FromRow<'r, R> + Unpin
 {
-    type Column: Clone + PartialEq + Send + Sync;
-    // fn primary_key_name() -> &'static str;
+}
+
+pub trait PrimaryKey {
+    type Column: Send + Sync + PartialEq;
+
     fn primary_key(&self) -> Self::Column;
 }
 
-// impl<C, R> SqlxComponent<R> for C
-// where
-//     C: Component + for<'r> FromRow<'r, R> + Unpin,
-//     R: Row,
-// {
-//     type Column = u32;
-//     // fn primary_key_name() -> &'static str;
-//     fn primary_key(&self) -> Self::Column {
-//         unimplemented!()
-//     }
-// }
+impl PrimaryKey for () {
+    type Column = Self;
+
+    fn primary_key(&self) -> Self {
+        *self
+    }
+}
 
 /// A record that can be upserted into the database
 //
 // TODO: https://github.com/nixpulvis/bevy_sqlx/issues/7
 pub trait ToRow {}
-
-/// An empty [`Component`] for use without a backing table
-#[derive(Component, FromRow, Debug, Clone)]
-pub struct SqlxDummy<DB: Database, Q: DB::Row>(PhantomData<Q>, PhantomData<DB>);
-
-impl<DB: Database, R: DB::Row> SqlxComponent<R> for SqlxDummy<DB> {
-    type Column = ();
-    fn primary_key(&self) -> () {}
-}

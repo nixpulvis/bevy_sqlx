@@ -52,7 +52,7 @@ where
             Query<(Entity, Ref<C>)>,
             Commands,
             ResMut<Self>,
-            EventWriter<SqlxEventStatus<DB, C>>,
+            EventWriter<SqlxEventStatus<C>>,
         )>,
     ) {
         let (mut query, mut commands, mut tasks, mut status) =
@@ -91,7 +91,6 @@ where
                                         event::next_event_id(),
                                         label.clone(),
                                         task_component.primary_key(),
-                                        PhantomData,
                                     ));
                                     commands
                                         .entity(entity)
@@ -101,7 +100,6 @@ where
                                         event::next_event_id(),
                                         label.clone(),
                                         task_component.primary_key(),
-                                        PhantomData,
                                     ));
                                     commands.spawn(task_component);
                                 }
