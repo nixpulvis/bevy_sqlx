@@ -14,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+          toolchain: nightly
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
