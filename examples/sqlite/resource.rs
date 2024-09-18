@@ -1,7 +1,7 @@
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
 use bevy_sqlx::{component::SqlxDummy, SqlxDatabase, SqlxPlugin};
-use sqlx::Sqlite;
+use sqlx::{Row, Sqlite};
 
 fn main() {
     App::new()
@@ -20,5 +20,5 @@ fn select(db: Res<SqlxDatabase<Sqlite>>) {
             .await
             .unwrap()
     });
-    dbg!(record);
+    dbg!(record.columns());
 }
