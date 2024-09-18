@@ -107,7 +107,7 @@ where
                         }
                         Err(err) => {
                             status.send(SqlxEventStatus::Error(
-                                event::next_event_id(),
+                                *id,
                                 err,
                             ));
                         }
