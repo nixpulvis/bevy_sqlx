@@ -41,16 +41,16 @@ fn main() {
 }
 
 fn delete(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
-    events.send(SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos"));
+    events.send(SqlxEvent::<Sqlite, Foo>::query_sync("DELETE FROM foos"));
 }
 
 fn insert(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
     let sql = "INSERT INTO foos(text) VALUES ('insert') RETURNING *";
-    events.send(SqlxEvent::<Sqlite, Foo>::query(sql));
+    events.send(SqlxEvent::<Sqlite, Foo>::query_sync(sql));
 }
 
 fn select(foos: Query<&Foo>, mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
-    events.send(SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM foos"));
+    events.send(SqlxEvent::<Sqlite, Foo>::query_sync("SELECT * FROM foos"));
 
     for foo in &foos {
         dbg!(&foo);
@@ -59,7 +59,7 @@ fn select(foos: Query<&Foo>, mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
 
 fn update(time: Res<Time>, mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
     let text = time.elapsed().as_millis().to_string();
-    events.send(SqlxEvent::<Sqlite, Foo>::call(move |db| {
+    events.send(SqlxEvent::<Sqlite, Foo>::call_sync(move |db| {
         let text = text.clone();
         async move {
             sqlx::query_as("UPDATE foos SET text = '?'")

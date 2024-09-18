@@ -6,6 +6,11 @@ description = "A SQLx database plugin for Bevy's ECS"
 repository = "https://github.com/nixpulvis/bevy_sqlx"
 license = "MIT"
 
+[features]
+sqlite-wayland = ["sqlx/sqlite", "bevy/bevy_winit", "bevy/wayland"]
+postgres-wayland = ["sqlx/postgres", "bevy/bevy_winit", "bevy/wayland"]
+
+
 [dependencies]
 bevy = { version = "0", default-features = false, features = [
     "multi_threaded",
@@ -20,8 +25,13 @@ bevy-inspector-egui = "0.25"
 # Examples
 
 [[example]]
-name = "sqlite-minimal"
-path = "examples/sqlite/minimal.rs"
+name = "sqlite-sync"
+path = "examples/sqlite/sync.rs"
+required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
+
+[[example]]
+name = "sqlite-return"
+path = "examples/sqlite/return.rs"
 required-features = ["sqlx/sqlite", "bevy/bevy_winit"]
 
 [[example]]
@@ -40,6 +50,6 @@ path = "examples/sqlite/resource.rs"
 required-features = ["sqlx/sqlite"]
 
 [[example]]
-name = "postgres-minimal"
-path = "examples/postgres/minimal.rs"
+name = "postgres-sync"
+path = "examples/postgres/sync.rs"
 required-features = ["sqlx/postgres", "bevy/bevy_winit"]

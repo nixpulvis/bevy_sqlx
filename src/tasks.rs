@@ -23,7 +23,7 @@ use std::marker::PhantomData;
 /// ```
 #[derive(Resource, Debug)]
 pub struct SqlxTasks<DB: Database, C: SqlxComponent<DB::Row>> {
-    pub components: Vec<(SqlxEventId, Task<Result<Vec<C>, Error>>)>,
+    pub components: Vec<(SqlxEventId, bool, Task<Result<Vec<C>, Error>>)>,
     _r: PhantomData<DB::Row>,
 }
 
@@ -58,58 +58,55 @@ where
         let (mut query, mut commands, mut tasks, mut status) =
             params.get_mut(world);
 
-        // for (entity, component) in &mut query {
-        //     // TODO: Send Encoded UPDATE or callback function?
-        //     // TODO: Need a dirty bit to check so we don't send just
-        //     //       received updated entities.
-        //     if component.is_changed() && !component.is_added() {
-        //         dbg!("TODO: UPDATE");
-        //     }
-        // }
-
-        tasks.components.retain_mut(|(id, task)| {
+        tasks.components.retain_mut(|(id, sync, task)| {
             block_on(future::poll_once(task))
                 .map(|result| {
                     match result {
                         Ok(task_components) => {
-                            // TODO: Look into world.spawn_batch after taking set
-                            // disjunction of ids.
-                            for task_component in task_components {
-                                // Check if the task's component is already spawned.
-                                let mut existing_entity = None;
-                                for (entity, spawned_component) in &mut query {
-                                    if task_component.primary_key()
-                                        == spawned_component.primary_key()
+                            if *sync {
+                                for task_component in task_components {
+                                    // Check if the task's component is already spawned.
+                                    let mut existing_entity = None;
+                                    for (entity, spawned_component) in
+                                        &mut query
                                     {
-                                        existing_entity = Some(entity);
-                                        break;
+                                        if task_component.primary_key()
+                                            == spawned_component.primary_key()
+                                        {
+                                            existing_entity = Some(entity);
+                                            break;
+                                        }
+                                    }
+
+                                    if let Some(entity) = existing_entity {
+                                        status.send(SqlxEventStatus::Update(
+                                            *id,
+                                            task_component.primary_key(),
+                                            PhantomData,
+                                        ));
+                                        commands
+                                            .entity(entity)
+                                            .insert(task_component);
+                                    } else {
+                                        status.send(SqlxEventStatus::Spawn(
+                                            *id,
+                                            task_component.primary_key(),
+                                            PhantomData,
+                                        ));
+                                        // TODO: Look into world.spawn_batch
+                                        // after taking set disjunction of ids.
+                                        commands.spawn(task_component);
                                     }
                                 }
-
-                                if let Some(entity) = existing_entity {
-                                    status.send(SqlxEventStatus::Update(
-                                        *id,
-                                        task_component.primary_key(),
-                                        PhantomData,
-                                    ));
-                                    commands
-                                        .entity(entity)
-                                        .insert(task_component);
-                                } else {
-                                    status.send(SqlxEventStatus::Spawn(
-                                        *id,
-                                        task_component.primary_key(),
-                                        PhantomData,
-                                    ));
-                                    commands.spawn(task_component);
-                                }
+                            } else {
+                                status.send(SqlxEventStatus::Return(
+                                    *id,
+                                    task_components,
+                                ));
                             }
                         }
                         Err(err) => {
-                            status.send(SqlxEventStatus::Error(
-                                *id,
-                                err,
-                            ));
+                            status.send(SqlxEventStatus::Error(*id, err));
                         }
                     }
                 })

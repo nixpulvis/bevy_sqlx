@@ -40,7 +40,8 @@ impl FooPlugin {
     ) {
         if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyD)
         {
-            events.send(SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos"));
+            events
+                .send(SqlxEvent::<Sqlite, Foo>::query_sync("DELETE FROM foos"));
             for (entity, _foo) in foos_query.iter() {
                 commands.entity(entity).despawn_recursive();
             }
@@ -48,22 +49,26 @@ impl FooPlugin {
 
         if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyI)
         {
-            events.send(SqlxEvent::<Sqlite, Foo>::call(move |db| async move {
-                let text: String = rand::thread_rng()
-                    .sample_iter(rand::distributions::Alphanumeric)
-                    .take(10)
-                    .map(char::from)
-                    .collect();
-                sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
+            events.send(SqlxEvent::<Sqlite, Foo>::call_sync(
+                move |db| async move {
+                    let text: String = rand::thread_rng()
+                        .sample_iter(rand::distributions::Alphanumeric)
+                        .take(10)
+                        .map(char::from)
+                        .collect();
+                    sqlx::query_as(
+                        "INSERT INTO foos (text) VALUES (?) RETURNING *",
+                    )
                     .bind(text)
                     .fetch_all(&db)
                     .await
-            }));
+                },
+            ));
         }
 
         if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyS)
         {
-            events.send(SqlxEvent::<Sqlite, Foo>::query(
+            events.send(SqlxEvent::<Sqlite, Foo>::query_sync(
                 "SELECT id, text, flag FROM foos",
             ));
         }
@@ -105,7 +110,8 @@ impl BarPlugin {
     ) {
         if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyD)
         {
-            events.send(SqlxEvent::<Sqlite, Bar>::query("DELETE FROM bars"));
+            events
+                .send(SqlxEvent::<Sqlite, Bar>::query_sync("DELETE FROM bars"));
             for (entity, _bar) in bars_query.iter() {
                 commands.entity(entity).despawn_recursive();
             }
@@ -118,7 +124,7 @@ impl BarPlugin {
             {
                 let foo: Arc<Foo> = foo.clone().into();
                 let sql = "INSERT INTO bars (foo_id) VALUES (?) RETURNING *";
-                events.send(SqlxEvent::<Sqlite, Bar>::call(move |db| {
+                events.send(SqlxEvent::<Sqlite, Bar>::call_sync(move |db| {
                     let foo = foo.clone();
                     async move {
                         sqlx::query_as(sql).bind(foo.id).fetch_all(&db).await
@@ -131,7 +137,9 @@ impl BarPlugin {
 
         if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyS)
         {
-            events.send(SqlxEvent::<Sqlite, Bar>::query("SELECT * FROM bars"));
+            events.send(SqlxEvent::<Sqlite, Bar>::query_sync(
+                "SELECT * FROM bars",
+            ));
         }
     }
 }
