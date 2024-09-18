@@ -47,13 +47,14 @@ pub fn next_event_id() -> SqlxEventId {
 /// # }
 /// fn insert(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
 ///     let sql = "INSERT INTO foos(text) VALUES ('test') RETURNING *";
-///     events.send(SqlxEvent::<Sqlite, Foo>::query(sql));
+///     events.send(SqlxEvent::<Sqlite, Foo>::query_sync(sql));
 /// }
 /// ```
 #[derive(Event, Clone)]
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
     pub(crate) func: SqlxEventFunc<DB, C>,
     id: SqlxEventId,
+    will_sync: bool,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
@@ -74,15 +75,27 @@ where
 {
     /// Construct a new [`SqlxEvent`] from the given SQL string
     ///
+    /// See [`Self::call`] for information.
     /// ```
     /// use sqlx::Sqlite;
     /// use bevy_sqlx::{SqlxEvent, SqlxDummy};
     ///
-    /// SqlxEvent::<Sqlite, SqlxDummy>::query("SELECT * FROM dummys");
+    /// SqlxEvent::<Sqlite, SqlxDummy>::query("SELECT * FROM foos");
     /// ```
     pub fn query(sql: &str) -> Self {
+        Self::query_private(false, sql)
+    }
+
+    /// Construct a new synchronizing [`SqlxEvent`] from the given SQL string
+    ///
+    /// See [`Self::call_sync`] for more information.
+    pub fn query_sync(sql: &str) -> Self {
+        Self::query_private(true, sql)
+    }
+
+    fn query_private(sync: bool, sql: &str) -> Self {
         let arc: Arc<str> = sql.into();
-        Self::call(move |db| {
+        Self::call_private(sync, move |db| {
             let s = arc.clone();
             async move { sqlx::query_as(&s).fetch_all(&db).await }
         })
@@ -91,12 +104,15 @@ where
     /// Construct a new [`SqlxEvent`] from the given function with access
     /// to a [`Pool<DB>`]
     ///
+    /// Upon a successful DB interaction, a [`SqlxEventStatus::Return`] event
+    /// will be sent.
+    ///
     /// ```
     /// use sqlx::Sqlite;
     /// use bevy_sqlx::{SqlxEvent, SqlxDummy};
     ///
     /// SqlxEvent::<Sqlite, SqlxDummy>::call(move |db| { async move {
-    ///     sqlx::query_as("INSERT INTO dummys (text) VALUES (?) RETURNING *")
+    ///     sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
     ///         .bind("hello")
     ///         .fetch_all(&db).await
     /// }});
@@ -106,9 +122,36 @@ where
         F: Fn(Pool<DB>) -> T + Send + Sync + 'static,
         T: Future<Output = Result<Vec<C>, Error>> + Send + 'static,
     {
+        Self::call_private(false, func)
+    }
+
+    /// Construct a new synchronizing [`SqlxEvent`] from the given function
+    /// with access to a [`Pool<DB>`]
+    ///
+    /// Upon a successful DB interaction, either of the following events will
+    /// be sent:
+    ///
+    /// - [`SqlxEventStatus::Spawn`]
+    /// - [`SqlxEventStatus::Update`]
+    ///
+    /// See [`Self::call`] for more information.
+    pub fn call_sync<F, T>(func: F) -> Self
+    where
+        F: Fn(Pool<DB>) -> T + Send + Sync + 'static,
+        T: Future<Output = Result<Vec<C>, Error>> + Send + 'static,
+    {
+        Self::call_private(true, func)
+    }
+
+    fn call_private<F, T>(sync: bool, func: F) -> Self
+    where
+        F: Fn(Pool<DB>) -> T + Send + Sync + 'static,
+        T: Future<Output = Result<Vec<C>, Error>> + Send + 'static,
+    {
         SqlxEvent {
             func: Arc::new(move |db: Pool<DB>| Box::pin(func(db))),
             id: next_event_id(),
+            will_sync: sync,
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
@@ -117,6 +160,11 @@ where
     /// Return the id of this event
     pub fn id(&self) -> SqlxEventId {
         self.id
+    }
+
+    /// Return true if this event will sync its component to the ECS
+    pub fn will_sync(&self) -> bool {
+        self.will_sync
     }
 }
 
@@ -132,6 +180,7 @@ where
 ///     for status in statuses.read() {
 ///         match status {
 ///             SqlxEventStatus::Start(id) => {},
+///             SqlxEventStatus::Return(id, comp) => {},
 ///             SqlxEventStatus::Spawn(id, pk, _) => {},
 ///             SqlxEventStatus::Update(id, pk, _) => {},
 ///             SqlxEventStatus::Error(id, err) => {},
@@ -142,9 +191,22 @@ where
 #[derive(Event, Debug)]
 pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
     Start(SqlxEventId),
+    Return(SqlxEventId, C),
     Spawn(SqlxEventId, C::Column, PhantomData<DB>),
     Update(SqlxEventId, C::Column, PhantomData<DB>),
     Error(SqlxEventId, Error),
+}
+
+impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxEventStatus<DB, C> {
+    pub fn id(&self) -> SqlxEventId {
+        match *self {
+            SqlxEventStatus::Start(id)
+            | SqlxEventStatus::Return(id, _)
+            | SqlxEventStatus::Spawn(id, _, _)
+            | SqlxEventStatus::Update(id, _, _)
+            | SqlxEventStatus::Error(id, _) => id,
+        }
+    }
 }
 
 impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>
@@ -170,13 +232,12 @@ where
             let db = database.pool.clone();
             let future = (event.func)(db);
             let task = task_pool.spawn(async move { future.await });
-            tasks.components.push((event.id(), task));
+            tasks.components.push((event.id(), event.will_sync(), task));
         }
     }
 }
 
 #[cfg(test)]
-#[cfg(feature = "sqlx/sqlite")]
 mod tests {
     use crate::*;
     use bevy::ecs::system::SystemState;
@@ -206,6 +267,18 @@ mod tests {
         app
     }
 
+    fn no_events(
+        app: &mut App,
+        system_state: &mut SystemState<(
+            Query<&Foo>,
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        )>,
+    ) -> bool {
+        let mut reader = system_state.get(app.world()).1;
+        let events = reader.read();
+        events.len() == 0
+    }
+
     #[test]
     fn test_event_status() {
         let mut app = setup_app();
@@ -216,6 +289,44 @@ mod tests {
 
         // Send an event.
         let sql = "INSERT INTO foos (text) VALUES ('tstevtsts') RETURNING *";
+        let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
+        app.world_mut().send_event(insert);
+
+        // No status events yet.
+        let mut reader = system_state.get(app.world()).1;
+        let events = reader.read();
+        assert_eq!(0, events.len());
+
+        // Update the app once.
+        app.update();
+
+        // We should have a single started event.
+        let mut reader = system_state.get(app.world()).1;
+        let mut events = reader.read();
+        assert_eq!(1, events.len());
+        assert_matches!(events.next().unwrap(), SqlxEventStatus::Start(_));
+
+        // Wait for the task's status event.
+        while no_events(&mut app, &mut system_state) {
+            app.update();
+        }
+
+        // We should now have a single spawned event!
+        let mut reader = system_state.get(app.world()).1;
+        let mut events = reader.read();
+        assert_matches!(events.next().unwrap(), SqlxEventStatus::Spawn(_, _, _))
+    }
+
+    #[test]
+    fn test_event_status_return() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<(
+            Query<&Foo>,
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        )> = SystemState::new(app.world_mut());
+
+        // Send an event.
+        let sql = "INSERT INTO foos (text) VALUES ('return') RETURNING *";
         let insert = SqlxEvent::<Sqlite, Foo>::query(sql);
         app.world_mut().send_event(insert);
 
@@ -231,8 +342,9 @@ mod tests {
         let mut reader = system_state.get(app.world()).1;
         let mut events = reader.read();
         assert_eq!(1, events.len());
-
-        assert_matches!(events.next().unwrap(), SqlxEventStatus::Start(_));
+        let start = events.next().unwrap();
+        let start_id = start.id();
+        assert_matches!(start, SqlxEventStatus::Start(_));
 
         // Wait for the task's status event.
         while no_events(&mut app, &mut system_state) {
@@ -244,19 +356,9 @@ mod tests {
         let mut events = reader.read();
         assert_matches!(
             events.next().unwrap(),
-            SqlxEventStatus::Spawn(_, _, _, _)
+            SqlxEventStatus::Return(return_id, component) if
+                *return_id == start_id &&
+                component.text == "return"
         )
-    }
-
-    fn no_events(
-        app: &mut App,
-        system_state: &mut SystemState<(
-            Query<&Foo>,
-            EventReader<SqlxEventStatus<Sqlite, Foo>>,
-        )>,
-    ) -> bool {
-        let mut reader = system_state.get(app.world()).1;
-        let events = reader.read();
-        events.len() == 0
     }
 }

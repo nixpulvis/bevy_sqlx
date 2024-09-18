@@ -23,7 +23,7 @@ use std::marker::PhantomData;
 /// ```
 #[derive(Resource, Debug)]
 pub struct SqlxTasks<DB: Database, C: SqlxComponent<DB::Row>> {
-    pub components: Vec<(SqlxEventId, Task<Result<Vec<C>, Error>>)>,
+    pub components: Vec<(SqlxEventId, bool, Task<Result<Vec<C>, Error>>)>,
     _r: PhantomData<DB::Row>,
 }
 
@@ -67,7 +67,7 @@ where
         //     }
         // }
 
-        tasks.components.retain_mut(|(id, task)| {
+        tasks.components.retain_mut(|(id, sync, task)| {
             block_on(future::poll_once(task))
                 .map(|result| {
                     match result {
@@ -86,30 +86,34 @@ where
                                     }
                                 }
 
-                                if let Some(entity) = existing_entity {
-                                    status.send(SqlxEventStatus::Update(
-                                        *id,
-                                        task_component.primary_key(),
-                                        PhantomData,
-                                    ));
-                                    commands
-                                        .entity(entity)
-                                        .insert(task_component);
+                                if *sync {
+                                    if let Some(entity) = existing_entity {
+                                        status.send(SqlxEventStatus::Update(
+                                            *id,
+                                            task_component.primary_key(),
+                                            PhantomData,
+                                        ));
+                                        commands
+                                            .entity(entity)
+                                            .insert(task_component);
+                                    } else {
+                                        status.send(SqlxEventStatus::Spawn(
+                                            *id,
+                                            task_component.primary_key(),
+                                            PhantomData,
+                                        ));
+                                        commands.spawn(task_component);
+                                    }
                                 } else {
-                                    status.send(SqlxEventStatus::Spawn(
+                                    status.send(SqlxEventStatus::Return(
                                         *id,
-                                        task_component.primary_key(),
-                                        PhantomData,
+                                        task_component,
                                     ));
-                                    commands.spawn(task_component);
                                 }
                             }
                         }
                         Err(err) => {
-                            status.send(SqlxEventStatus::Error(
-                                *id,
-                                err,
-                            ));
+                            status.send(SqlxEventStatus::Error(*id, err));
                         }
                     }
                 })

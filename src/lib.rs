@@ -65,7 +65,7 @@
 //! # app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(&url));
 //! fn select(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
 //!     let sql = "SELECT * FROM foos";
-//!     events.send(SqlxEvent::<Sqlite, Foo>::query(sql));
+//!     events.send(SqlxEvent::<Sqlite, Foo>::query_sync(sql));
 //! }
 //! ```
 //!
@@ -110,6 +110,7 @@
 //!     for status in statuses.read() {
 //!         match status {
 //!             SqlxEventStatus::Start(id) => {},
+//!             SqlxEventStatus::Return(id, comp) => {},
 //!             SqlxEventStatus::Spawn(id, pk, _) => {},
 //!             SqlxEventStatus::Update(id, pk, _) => {},
 //!             SqlxEventStatus::Error(id, err) => {},
@@ -133,13 +134,11 @@ mod tasks;
 pub use self::tasks::*;
 
 #[cfg(test)]
-#[cfg(feature = "sqlx/sqlite")]
 mod tests {
     use crate::*;
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
     use bevy::tasks::{AsyncComputeTaskPool, TaskPool};
-    #[cfg(feature = "sqlx/sqlite")]
     use sqlx::{FromRow, Sqlite};
 
     #[derive(Component, FromRow, Debug)]
@@ -164,13 +163,13 @@ mod tests {
     }
 
     #[test]
-    fn test_query() {
+    fn test_query_sync() {
         let mut app = setup_app();
         let mut system_state: SystemState<Query<&Foo>> =
             SystemState::new(app.world_mut());
 
         let sql = "INSERT INTO foos (text) VALUES ('test query') RETURNING *";
-        let insert = SqlxEvent::<Sqlite, Foo>::query(sql);
+        let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
         app.world_mut().send_event(insert);
 
         let mut tries = 0;
@@ -186,17 +185,17 @@ mod tests {
     }
 
     #[test]
-    fn test_callback() {
+    fn test_call_sync() {
         let mut app = setup_app();
         let mut system_state: SystemState<Query<&Foo>> =
             SystemState::new(app.world_mut());
 
-        let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
-        app.world_mut().send_event(delete);
+        // let delete = SqlxEvent::<Sqlite, Foo>::query("DELETE FROM foos");
+        // app.world_mut().send_event(delete);
 
         let text = "test callback";
         let insert =
-            SqlxEvent::<Sqlite, Foo>::call(None, move |db| async move {
+            SqlxEvent::<Sqlite, Foo>::call_sync(move |db| async move {
                 sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
                     .bind(text)
                     .fetch_all(&db)
