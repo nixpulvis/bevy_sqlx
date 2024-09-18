@@ -14,12 +14,19 @@ use sqlx::{Database, Error, Executor, IntoArguments, Pool};
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 /// The type of [`SqlxEvent`] IDs
 pub type SqlxEventId = u32;
 
-pub(crate) const FIXME: u32 = 1337;
+pub(crate) static EVENT_ID_GENERATOR: AtomicU32 = AtomicU32::new(1);
+
+// TODO: Take note of when this should be expected to overflow and if it's
+// worth the cost in generating unique IDs
+pub fn next_event_id() -> SqlxEventId {
+    EVENT_ID_GENERATOR.fetch_add(1, Ordering::Relaxed)
+}
 
 /// An [`Event`] for fetching data from the [`SqlxDatabase`]
 ///
@@ -102,8 +109,8 @@ where
     {
         SqlxEvent {
             func: Arc::new(move |db: Pool<DB>| Box::pin(func(db))),
-            id: FIXME,
-            label: label,
+            id: next_event_id(),
+            label,
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
