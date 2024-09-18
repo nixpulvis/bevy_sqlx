@@ -48,26 +48,24 @@ impl FooPlugin {
 
         if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyI)
         {
-            events.send(SqlxEvent::<Sqlite, Foo>::call(
-                move |db| async move {
-                    let text: String = rand::thread_rng()
-                        .sample_iter(rand::distributions::Alphanumeric)
-                        .take(10)
-                        .map(char::from)
-                        .collect();
-                    sqlx::query_as(
-                        "INSERT INTO foos (text) VALUES (?) RETURNING *",
-                    )
+            events.send(SqlxEvent::<Sqlite, Foo>::call(move |db| async move {
+                let text: String = rand::thread_rng()
+                    .sample_iter(rand::distributions::Alphanumeric)
+                    .take(10)
+                    .map(char::from)
+                    .collect();
+                sqlx::query_as("INSERT INTO foos (text) VALUES (?) RETURNING *")
                     .bind(text)
                     .fetch_all(&db)
                     .await
-                },
-            ));
+            }));
         }
 
         if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyS)
         {
-            events.send(SqlxEvent::<Sqlite, Foo>::query("SELECT id, text, flag FROM foos"));
+            events.send(SqlxEvent::<Sqlite, Foo>::query(
+                "SELECT id, text, flag FROM foos",
+            ));
         }
     }
 }
