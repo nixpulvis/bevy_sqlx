@@ -18,29 +18,29 @@
 //!
 //! TODO: Explain `ToRow` and `FromRow` here.
 use bevy::prelude::*;
-use sqlx::{FromRow, Row};
+use sqlx::{Database, FromRow, Row};
+use std::marker::PhantomData;
 
 /// Rows in the database represent a spesifc [`Component`]
 pub trait SqlxComponent<R: Row>:
-    PrimaryKey + Component + for<'r> FromRow<'r, R> + Unpin
+    Component + for<'r> FromRow<'r, R> + Unpin
 {
-}
-
-impl<C, R> SqlxComponent<R> for C
-where
-    C: PrimaryKey + Component + for<'r> FromRow<'r, R> + Unpin,
-    R: Row,
-{
-}
-
-/// A way to identify components by themselves
-//
-// TODO: Look into impl PartialEq<PrimaryKey<...>> for Foo
-pub trait PrimaryKey {
     type Column: Clone + PartialEq + Send + Sync;
     // fn primary_key_name() -> &'static str;
     fn primary_key(&self) -> Self::Column;
 }
+
+// impl<C, R> SqlxComponent<R> for C
+// where
+//     C: Component + for<'r> FromRow<'r, R> + Unpin,
+//     R: Row,
+// {
+//     type Column = u32;
+//     // fn primary_key_name() -> &'static str;
+//     fn primary_key(&self) -> Self::Column {
+//         unimplemented!()
+//     }
+// }
 
 /// A record that can be upserted into the database
 //
@@ -49,8 +49,9 @@ pub trait ToRow {}
 
 /// An empty [`Component`] for use without a backing table
 #[derive(Component, FromRow, Debug, Clone)]
-pub struct SqlxDummy {}
-impl PrimaryKey for SqlxDummy {
+pub struct SqlxDummy<DB: Database, Q: DB::Row>(PhantomData<Q>, PhantomData<DB>);
+
+impl<DB: Database, R: DB::Row> SqlxComponent<R> for SqlxDummy<DB> {
     type Column = ();
-    fn primary_key(&self) {}
+    fn primary_key(&self) -> () {}
 }
