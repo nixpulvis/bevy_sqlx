@@ -54,7 +54,6 @@ pub fn next_event_id() -> SqlxEventId {
 pub struct SqlxEvent<DB: Database, C: SqlxComponent<DB::Row>> {
     pub(crate) func: SqlxEventFunc<DB, C>,
     id: SqlxEventId,
-    label: Option<String>,
     _db: PhantomData<DB>,
     _c: PhantomData<C>,
 }
@@ -83,7 +82,7 @@ where
     /// ```
     pub fn query(sql: &str) -> Self {
         let arc: Arc<str> = sql.into();
-        Self::call(Some(sql.into()), move |db| {
+        Self::call(move |db| {
             let s = arc.clone();
             async move { sqlx::query_as(&s).fetch_all(&db).await }
         })
@@ -96,13 +95,13 @@ where
     /// use sqlx::Sqlite;
     /// use bevy_sqlx::{SqlxEvent, SqlxDummy};
     ///
-    /// SqlxEvent::<Sqlite, SqlxDummy>::call(None, move |db| { async move {
+    /// SqlxEvent::<Sqlite, SqlxDummy>::call(move |db| { async move {
     ///     sqlx::query_as("INSERT INTO dummys (text) VALUES (?) RETURNING *")
     ///         .bind("hello")
     ///         .fetch_all(&db).await
     /// }});
     /// ```
-    pub fn call<F, T>(label: Option<&str>, func: F) -> Self
+    pub fn call<F, T>(func: F) -> Self
     where
         F: Fn(Pool<DB>) -> T + Send + Sync + 'static,
         T: Future<Output = Result<Vec<C>, Error>> + Send + 'static,
@@ -110,7 +109,6 @@ where
         SqlxEvent {
             func: Arc::new(move |db: Pool<DB>| Box::pin(func(db))),
             id: next_event_id(),
-            label: label.map(|s| s.to_string()),
             _db: PhantomData::<DB>,
             _c: PhantomData::<C>,
         }
@@ -119,11 +117,6 @@ where
     /// Return the id of this event
     pub fn id(&self) -> SqlxEventId {
         self.id
-    }
-
-    /// A useful message corresponding to this event
-    pub fn label(&self) -> Option<String> {
-        self.label.clone()
     }
 }
 
@@ -138,20 +131,20 @@ where
 /// fn status(mut statuses: EventReader<SqlxEventStatus<Sqlite, SqlxDummy>>) {
 ///     for status in statuses.read() {
 ///         match status {
-///             SqlxEventStatus::Start(id, label) => {},
-///             SqlxEventStatus::Spawn(id, label, pk, _) => {},
-///             SqlxEventStatus::Update(id, label, pk, _) => {},
-///             SqlxEventStatus::Error(id, label, err) => {},
+///             SqlxEventStatus::Start(id) => {},
+///             SqlxEventStatus::Spawn(id, pk, _) => {},
+///             SqlxEventStatus::Update(id, pk, _) => {},
+///             SqlxEventStatus::Error(id, err) => {},
 ///         }
 ///     }
 /// }
 /// ```
 #[derive(Event, Debug)]
 pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
-    Start(SqlxEventId, Option<String>),
-    Spawn(SqlxEventId, Option<String>, C::Column, PhantomData<DB>),
-    Update(SqlxEventId, Option<String>, C::Column, PhantomData<DB>),
-    Error(SqlxEventId, Option<String>, Error),
+    Start(SqlxEventId),
+    Spawn(SqlxEventId, C::Column, PhantomData<DB>),
+    Update(SqlxEventId, C::Column, PhantomData<DB>),
+    Error(SqlxEventId, Error),
 }
 
 impl<DB: Database + Sync, C: SqlxComponent<DB::Row>> SqlxEvent<DB, C>
@@ -173,11 +166,11 @@ where
     ) {
         let task_pool = AsyncComputeTaskPool::get();
         for event in events.read() {
-            status.send(SqlxEventStatus::Start(event.id(), event.label()));
+            status.send(SqlxEventStatus::Start(event.id()));
             let db = database.pool.clone();
             let future = (event.func)(db);
             let task = task_pool.spawn(async move { future.await });
-            tasks.components.push((event.label(), task));
+            tasks.components.push((event.id(), task));
         }
     }
 }
@@ -239,11 +232,7 @@ mod tests {
         let mut events = reader.read();
         assert_eq!(1, events.len());
 
-        assert_matches!(events.next().unwrap(),
-                        SqlxEventStatus::Start(_, label) if
-                            label.clone()
-                             .expect("event called with `query`")
-                             .contains("INSERT"));
+        assert_matches!(events.next().unwrap(), SqlxEventStatus::Start(_));
 
         // Wait for the task's status event.
         while no_events(&mut app, &mut system_state) {

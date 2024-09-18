@@ -49,7 +49,6 @@ impl FooPlugin {
         if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyI)
         {
             events.send(SqlxEvent::<Sqlite, Foo>::call(
-                Some("INSERT"),
                 move |db| async move {
                     let text: String = rand::thread_rng()
                         .sample_iter(rand::distributions::Alphanumeric)
@@ -68,9 +67,7 @@ impl FooPlugin {
 
         if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyS)
         {
-            SqlxEvent::<Sqlite, Foo>::query("SELECT id, text, flag FROM foos")
-                .send(&mut events)
-                .trigger(&mut commands);
+            events.send(SqlxEvent::<Sqlite, Foo>::query("SELECT id, text, flag FROM foos"));
         }
     }
 }
@@ -110,9 +107,7 @@ impl BarPlugin {
     ) {
         if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyD)
         {
-            SqlxEvent::<Sqlite, Bar>::query("DELETE FROM bars")
-                .send(&mut events)
-                .trigger(&mut commands);
+            events.send(SqlxEvent::<Sqlite, Bar>::query("DELETE FROM bars"));
             for (entity, _bar) in bars_query.iter() {
                 commands.entity(entity).despawn_recursive();
             }
@@ -125,14 +120,12 @@ impl BarPlugin {
             {
                 let foo: Arc<Foo> = foo.clone().into();
                 let sql = "INSERT INTO bars (foo_id) VALUES (?) RETURNING *";
-                SqlxEvent::<Sqlite, Bar>::call(Some(sql), move |db| {
+                events.send(SqlxEvent::<Sqlite, Bar>::call(move |db| {
                     let foo = foo.clone();
                     async move {
                         sqlx::query_as(sql).bind(foo.id).fetch_all(&db).await
                     }
-                })
-                .send(&mut events)
-                .trigger(&mut commands);
+                }));
             } else {
                 dbg!("No Foo to choose from.");
             }
@@ -140,9 +133,7 @@ impl BarPlugin {
 
         if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyS)
         {
-            SqlxEvent::<Sqlite, Bar>::query("SELECT * FROM bars")
-                .send(&mut events)
-                .trigger(&mut commands);
+            events.send(SqlxEvent::<Sqlite, Bar>::query("SELECT * FROM bars"));
         }
     }
 }

@@ -23,7 +23,7 @@ use std::marker::PhantomData;
 /// ```
 #[derive(Resource, Debug)]
 pub struct SqlxTasks<DB: Database, C: SqlxComponent<DB::Row>> {
-    pub components: Vec<(Option<String>, Task<Result<Vec<C>, Error>>)>,
+    pub components: Vec<(SqlxEventId, Task<Result<Vec<C>, Error>>)>,
     _r: PhantomData<DB::Row>,
 }
 
@@ -67,7 +67,7 @@ where
         //     }
         // }
 
-        tasks.components.retain_mut(|(label, task)| {
+        tasks.components.retain_mut(|(id, task)| {
             block_on(future::poll_once(task))
                 .map(|result| {
                     match result {
@@ -88,8 +88,7 @@ where
 
                                 if let Some(entity) = existing_entity {
                                     status.send(SqlxEventStatus::Update(
-                                        event::next_event_id(),
-                                        label.clone(),
+                                        *id,
                                         task_component.primary_key(),
                                         PhantomData,
                                     ));
@@ -98,8 +97,7 @@ where
                                         .insert(task_component);
                                 } else {
                                     status.send(SqlxEventStatus::Spawn(
-                                        event::next_event_id(),
-                                        label.clone(),
+                                        *id,
                                         task_component.primary_key(),
                                         PhantomData,
                                     ));
@@ -110,7 +108,6 @@ where
                         Err(err) => {
                             status.send(SqlxEventStatus::Error(
                                 event::next_event_id(),
-                                label.clone(),
                                 err,
                             ));
                         }

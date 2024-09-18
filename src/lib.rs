@@ -109,10 +109,10 @@
 //! ) {
 //!     for status in statuses.read() {
 //!         match status {
-//!             SqlxEventStatus::Start(id, label) => {},
-//!             SqlxEventStatus::Spawn(id, label, pk, _) => {},
-//!             SqlxEventStatus::Update(id, label, pk, _) => {},
-//!             SqlxEventStatus::Error(id, label, err) => {},
+//!             SqlxEventStatus::Start(id) => {},
+//!             SqlxEventStatus::Spawn(id, pk, _) => {},
+//!             SqlxEventStatus::Update(id, pk, _) => {},
+//!             SqlxEventStatus::Error(id, err) => {},
 //!         }
 //!     }
 //! }

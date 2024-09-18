@@ -59,7 +59,7 @@ fn select(foos: Query<&Foo>, mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
 
 fn update(time: Res<Time>, mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
     let text = time.elapsed().as_millis().to_string();
-    events.send(SqlxEvent::<Sqlite, Foo>::call(None, move |db| {
+    events.send(SqlxEvent::<Sqlite, Foo>::call(move |db| {
         let text = text.clone();
         async move {
             sqlx::query_as("UPDATE foos SET text = '?'")
