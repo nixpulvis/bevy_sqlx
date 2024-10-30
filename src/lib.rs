@@ -45,9 +45,63 @@
 //!     .run();
 //! ```
 //!
-//! ### Usage
+//! ### Usage (return component directly)
 //!
-//! - Send [`SqlxEvent`] events to query the database
+//! - Send events with [`SqlxEvent::query`] or [`SqlxEvent::call`] to query
+//! the database
+//!
+//! ```
+//! # use bevy::prelude::*;
+//! # use sqlx::{FromRow, Sqlite};
+//! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, PrimaryKey};
+//! # #[derive(Component, FromRow)]
+//! # struct Foo(u32);
+//! # impl PrimaryKey for Foo {
+//! #     type Column = u32;
+//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! # }
+//! # let url = "sqlite:db/sqlite.db";
+//! # let mut app = App::new();
+//! # app.add_plugins(DefaultPlugins);
+//! # app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(&url));
+//! fn select(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
+//!     let sql = "SELECT * FROM foos";
+//!     events.send(SqlxEvent::<Sqlite, Foo>::query(sql));
+//! }
+//! ```
+//!
+//! - Respond to [`SqlxEventStatus::Return`] events
+//!
+//! ```
+//! # use bevy::prelude::*;
+//! # use sqlx::{FromRow, Sqlite};
+//! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, SqlxEventStatus, PrimaryKey};
+//! # #[derive(Component, FromRow, Debug)]
+//! # struct Foo(u32);
+//! # impl PrimaryKey for Foo {
+//! #     type Column = u32;
+//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! # }
+//! fn status(
+//!     foos: Query<&Foo>,
+//!     mut statuses: EventReader<SqlxEventStatus<Sqlite, Foo>>,
+//! ) {
+//!     for status in statuses.read() {
+//!         match status {
+//!             SqlxEventStatus::Return(_, component) => {
+//!                 dbg!(component);
+//!             },
+//!             _ => {}
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! ### Usage (synchronize component with entities)
+//!
+//!
+//! - Send events with [`SqlxEvent::query_sync`] or [`SqlxEvent::call_sync`] to
+//! query the database
 //!
 //! ```
 //! # use bevy::prelude::*;
@@ -92,28 +146,34 @@
 //! }
 //! ```
 //!
-//! - Respond to [`SqlxEventStatus`] events
+//! - And/or, respond to [`SqlxEventStatus::Spawn`] and [`SqlxEventStatus::Update`]
+//! events
 //!
 //! ```
 //! # use bevy::prelude::*;
 //! # use sqlx::{FromRow, Sqlite};
 //! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, SqlxEventStatus, PrimaryKey};
-//! # #[derive(Component, FromRow)]
+//! # #[derive(Component, FromRow, Debug)]
 //! # struct Foo(u32);
 //! # impl PrimaryKey for Foo {
 //! #     type Column = u32;
 //! #     fn primary_key(&self) -> Self::Column { self.0 }
 //! # }
 //! fn status(
+//!     foos: Query<&Foo>,
 //!     mut statuses: EventReader<SqlxEventStatus<Sqlite, Foo>>,
 //! ) {
 //!     for status in statuses.read() {
 //!         match status {
-//!             SqlxEventStatus::Start(id) => {},
-//!             SqlxEventStatus::Return(id, comp) => {},
-//!             SqlxEventStatus::Spawn(id, pk, _) => {},
-//!             SqlxEventStatus::Update(id, pk, _) => {},
-//!             SqlxEventStatus::Error(id, err) => {},
+//!             SqlxEventStatus::Spawn(_, pk, _) |
+//!             SqlxEventStatus::Update(_, pk, _) => {
+//!                 for foo in &foos {
+//!                     if foo.primary_key() == *pk {
+//!                         dbg!(foo);
+//!                     }
+//!                 }
+//!             },
+//!             _ => {}
 //!         }
 //!     }
 //! }
