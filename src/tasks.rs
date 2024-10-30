@@ -23,7 +23,7 @@ use std::marker::PhantomData;
 /// ```
 #[derive(Resource, Debug)]
 pub struct SqlxTasks<DB: Database, C: SqlxComponent<DB::Row>> {
-    pub components: Vec<(SqlxEventId, bool, Task<Result<Vec<C>, Error>>)>,
+    pub(crate) components: Vec<(SqlxEventId, bool, Task<Result<Vec<C>, Error>>)>,
     _r: PhantomData<DB::Row>,
 }
 
@@ -38,14 +38,22 @@ where
     for<'c> &'c mut <DB as Database>::Connection: Executor<'c, Database = DB>,
     for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
 {
-    /// An exclusive [`System`] which polls [`Task`]s in [`ResMut<SqlxTasks<DB,
-    /// C>>`]
+    /// An exclusive [`System`] which polls [`Task`]s for `Result<C, Error>`
     ///
     /// Tasks are spawned in [`SqlxEvent::handle_events`].
     ///
-    /// When a task is finished, we check if the component is already spawned:
+    /// If [`SqlxEvent::will_sync`] was `true`:
+    ///
+    /// When a task is finished, we check if the component of type `C` is
+    /// already spawned:
     /// - If it is, we just `insert` the new component over the existing one
-    /// - If it isn't, we `spawn` a new entity with the new component
+    /// and send an [`SqlxEventStatus::Update`]
+    /// - If it isn't, we `spawn` a new entity with the new component and send
+    /// an [`SqlxEventStatus::Spawn`]
+    ///
+    /// If [`SqlxEvent::will_sync`] was `false`:
+    ///
+    /// - We send an [`SqlxEventStatus::Return`] with the component itself.
     pub fn handle_tasks(
         world: &mut World,
         params: &mut SystemState<(
