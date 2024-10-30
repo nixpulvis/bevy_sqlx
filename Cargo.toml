@@ -1,6 +1,6 @@
 [package]
 name = "bevy_sqlx"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 description = "A SQLx database plugin for Bevy's ECS"
 repository = "https://github.com/nixpulvis/bevy_sqlx"
