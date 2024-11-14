@@ -33,7 +33,7 @@ fn delete(mut events: EventWriter<SqlxEvent<Postgres, Foo>>) {
 
 fn insert(mut events: EventWriter<SqlxEvent<Postgres, Foo>>) {
     let sql = "INSERT INTO foos(id, text) VALUES (1, 'insert') RETURNING *";
-    events.send(SqlxEvent::<Postgres, Foo>::query(sql));
+    events.send(SqlxEvent::<Postgres, Foo>::query_sync(sql));
 }
 
 fn query(foos: Query<Ref<Foo>>) {
