@@ -38,8 +38,7 @@ impl FooPlugin {
         mut commands: Commands,
         mut events: EventWriter<SqlxEvent<Sqlite, Foo>>,
     ) {
-        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyD)
-        {
+        if keys.pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyD) {
             events
                 .send(SqlxEvent::<Sqlite, Foo>::query_sync("DELETE FROM foos"));
             for (entity, _foo) in foos_query.iter() {
@@ -47,8 +46,7 @@ impl FooPlugin {
             }
         }
 
-        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyI)
-        {
+        if keys.pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyI) {
             events.send(SqlxEvent::<Sqlite, Foo>::call_sync(
                 move |db| async move {
                     let text: String = rand::thread_rng()
@@ -66,8 +64,7 @@ impl FooPlugin {
             ));
         }
 
-        if keys.just_pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyS)
-        {
+        if keys.pressed(KeyCode::KeyF) && keys.just_pressed(KeyCode::KeyS) {
             events.send(SqlxEvent::<Sqlite, Foo>::query_sync(
                 "SELECT id, text, flag FROM foos",
             ));
@@ -108,8 +105,7 @@ impl BarPlugin {
         mut commands: Commands,
         mut events: EventWriter<SqlxEvent<Sqlite, Bar>>,
     ) {
-        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyD)
-        {
+        if keys.pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyD) {
             events
                 .send(SqlxEvent::<Sqlite, Bar>::query_sync("DELETE FROM bars"));
             for (entity, _bar) in bars_query.iter() {
@@ -117,8 +113,7 @@ impl BarPlugin {
             }
         }
 
-        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyI)
-        {
+        if keys.pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyI) {
             // Choose a random Foo to be associated with
             if let Some(foo) = foos_query.iter().choose(&mut rand::thread_rng())
             {
@@ -135,8 +130,7 @@ impl BarPlugin {
             }
         }
 
-        if keys.just_pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyS)
-        {
+        if keys.pressed(KeyCode::KeyB) && keys.just_pressed(KeyCode::KeyS) {
             events.send(SqlxEvent::<Sqlite, Bar>::query_sync(
                 "SELECT * FROM bars",
             ));
