@@ -19,6 +19,7 @@ sqlx = { version = "0", features = ["runtime-async-std"] }
 
 [dev-dependencies]
 rand = "0.8"
+assert_matches = "1.5"
 bevy-inspector-egui = "0.25"
 
 

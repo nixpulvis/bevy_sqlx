@@ -244,7 +244,7 @@ mod tests {
     use bevy::prelude::*;
     use bevy::tasks::{AsyncComputeTaskPool, TaskPool};
     use sqlx::{FromRow, Sqlite};
-    use std::assert_matches::assert_matches;
+    use assert_matches::assert_matches;
 
     #[derive(Component, FromRow, Debug)]
     struct Foo {
