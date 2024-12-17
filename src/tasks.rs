@@ -123,4 +123,12 @@ where
 
         params.apply(world);
     }
+
+    pub fn count(&self) -> usize {
+        self.components.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.components.is_empty()
+    }
 }
