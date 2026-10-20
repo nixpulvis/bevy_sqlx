@@ -191,3 +191,5 @@ pub use self::plugin::*;
 
 mod tasks;
 pub use self::tasks::*;
+pub mod row;
+pub use self::row::*;

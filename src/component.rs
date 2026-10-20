@@ -42,11 +42,6 @@ pub trait PrimaryKey {
     fn primary_key(&self) -> Self::Column;
 }
 
-/// A record that can be upserted into the database
-//
-// TODO: https://github.com/nixpulvis/bevy_sqlx/issues/7
-pub trait ToRow {}
-
 /// An empty [`Component`] for use without a backing table
 #[derive(Component, FromRow, Debug, Clone)]
 pub struct SqlxDummy {}
