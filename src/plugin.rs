@@ -28,7 +28,7 @@ impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C> {
     /// use sqlx::{Pool, Sqlite};
     /// use bevy_sqlx::{SqlxPlugin, SqlxDummy};
     ///
-    /// let url = "sqlite:db/sqlite.db";
+    /// let url = "sqlite::memory:";
     /// let pool = block_on(async {
     ///     Pool::connect(url).await.unwrap()
     /// });
@@ -44,7 +44,7 @@ impl<DB: Database, C: SqlxComponent<DB::Row>> SqlxPlugin<DB, C> {
     /// use sqlx::Sqlite;
     /// use bevy_sqlx::{SqlxPlugin, SqlxDummy};
     ///
-    /// SqlxPlugin::<Sqlite, SqlxDummy>::from_url("sqlite:db/sqlite.db");
+    /// SqlxPlugin::<Sqlite, SqlxDummy>::from_url("sqlite::memory:");
     /// ```
     pub fn from_url(url: &str) -> Self {
         let pool = block_on(async { Pool::connect(url).await.unwrap() });

@@ -240,11 +240,13 @@ where
 #[cfg(test)]
 mod tests {
     use crate::*;
+    use assert_matches::assert_matches;
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
-    use bevy::tasks::{AsyncComputeTaskPool, TaskPool};
+    use bevy::tasks::{block_on, AsyncComputeTaskPool, TaskPool};
+    use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::{FromRow, Sqlite};
-    use assert_matches::assert_matches;
+    use std::time::{Duration, Instant};
 
     #[derive(Component, FromRow, Debug)]
     struct Foo {
@@ -259,48 +261,55 @@ mod tests {
         }
     }
 
+    /// A fresh in-memory database per test, so tests can run in parallel
+    /// without sharing state or contending for SQLite's write lock.
     fn setup_app() -> App {
         AsyncComputeTaskPool::get_or_init(|| TaskPool::new());
-        let url = "sqlite:db/sqlite.db";
+        let pool = block_on(async {
+            // Every connection to `sqlite::memory:` is its own database, so
+            // keep exactly one connection open for the life of the pool.
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .idle_timeout(None)
+                .max_lifetime(None)
+                .connect("sqlite::memory:")
+                .await
+                .unwrap();
+            sqlx::migrate!().run(&pool).await.unwrap();
+            pool
+        });
         let mut app = App::new();
-        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_url(url));
+        app.add_plugins(SqlxPlugin::<Sqlite, Foo>::from_pool(pool));
         app
     }
 
-    fn no_events(
+    /// Update the app until the event finishes, then check its status
+    ///
+    /// Panics on an [`SqlxEventStatus::Error`] or if nothing finishes within
+    /// a few seconds, rather than letting a test spin on a failed query.
+    fn wait_for_status(
         app: &mut App,
         system_state: &mut SystemState<
             EventReader<SqlxEventStatus<Sqlite, Foo>>,
         >,
-    ) -> bool {
-        let mut reader = system_state.get(app.world());
-        let events = reader.read();
-        events.len() == 0
-    }
-
-    fn wait_for_event(
-        mut app: &mut App,
-        mut system_state: &mut SystemState<
-            EventReader<SqlxEventStatus<Sqlite, Foo>>,
-        >,
+        check: impl Fn(&SqlxEventStatus<Sqlite, Foo>),
     ) {
-        while no_events(&mut app, &mut system_state) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
             app.update();
+            let mut reader = system_state.get(app.world());
+            for status in reader.read() {
+                match status {
+                    SqlxEventStatus::Start(_) => {}
+                    SqlxEventStatus::Error(_, err) => {
+                        panic!("query failed: {err}")
+                    }
+                    status => return check(status),
+                }
+            }
+            assert!(Instant::now() < deadline, "timed out waiting for status");
+            std::thread::sleep(Duration::from_millis(1));
         }
-    }
-
-    fn skip_started_event(
-        mut app: &mut App,
-        mut system_state: &mut SystemState<
-            EventReader<SqlxEventStatus<Sqlite, Foo>>,
-        >,
-    ) {
-        while no_events(&mut app, &mut system_state) {
-            app.update();
-        }
-        let mut reader = system_state.get(app.world());
-        let mut events = reader.read();
-        assert_matches!(events.next().unwrap(), SqlxEventStatus::Start(_));
     }
 
     #[test]
@@ -314,42 +323,39 @@ mod tests {
         let insert = SqlxEvent::<Sqlite, Foo>::query(sql);
         app.world_mut().send_event(insert);
 
-        skip_started_event(&mut app, &mut system_state);
-        wait_for_event(&mut app, &mut system_state);
-
-        let mut reader = system_state.get(app.world());
-        let mut events = reader.read();
-        assert_matches!(events.next().unwrap(),
-            SqlxEventStatus::Return(_, components)
-                if components[0].text == "query");
+        wait_for_status(&mut app, &mut system_state, |status| {
+            assert_matches!(status,
+                SqlxEventStatus::Return(_, components)
+                    if components[0].text == "query");
+        });
     }
 
     #[test]
     fn test_query_sync() {
         let mut app = setup_app();
-        let mut system_state: SystemState<Query<&Foo>> =
+        let mut system_state: SystemState<
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        > = SystemState::new(app.world_mut());
+        let mut query_state: SystemState<Query<&Foo>> =
             SystemState::new(app.world_mut());
 
         let sql = "INSERT INTO foos (text) VALUES ('query_sync') RETURNING *";
         let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
         app.world_mut().send_event(insert);
 
-        let mut tries = 0;
-        let mut len = system_state.get(app.world()).iter().len();
-        while !(len > 0) && tries < 1000 {
-            app.update();
-            len = system_state.get(app.world()).iter().len();
-            tries += 1;
-        }
+        wait_for_status(&mut app, &mut system_state, |_| {});
 
-        let query = system_state.get(app.world());
+        let query = query_state.get(app.world());
         assert_eq!("query_sync", query.single().text);
     }
 
     #[test]
     fn test_call_sync() {
         let mut app = setup_app();
-        let mut system_state: SystemState<Query<&Foo>> =
+        let mut system_state: SystemState<
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        > = SystemState::new(app.world_mut());
+        let mut query_state: SystemState<Query<&Foo>> =
             SystemState::new(app.world_mut());
 
         let text = "call_sync";
@@ -362,39 +368,31 @@ mod tests {
             });
         app.world_mut().send_event(insert);
 
-        let mut tries = 0;
-        let mut len = system_state.get(app.world()).iter().len();
-        while !(len > 0) && tries < 1000 {
-            app.update();
-            len = system_state.get(app.world()).iter().len();
-            tries += 1;
-        }
+        wait_for_status(&mut app, &mut system_state, |_| {});
 
-        let query = system_state.get(app.world());
+        let query = query_state.get(app.world());
         assert_eq!(text, query.single().text);
     }
 
     #[test]
     fn test_event_status_started() {
         let mut app = setup_app();
-        let mut system_state: SystemState<(
-            Query<&Foo>,
+        let mut system_state: SystemState<
             EventReader<SqlxEventStatus<Sqlite, Foo>>,
-        )> = SystemState::new(app.world_mut());
+        > = SystemState::new(app.world_mut());
 
         let sql = "INSERT INTO foos (text) VALUES ('spawn') RETURNING *";
         let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
         app.world_mut().send_event(insert);
 
-        let mut reader = system_state.get(app.world()).1;
+        let mut reader = system_state.get(app.world());
         let events = reader.read();
         assert_eq!(0, events.len());
 
         app.update();
 
-        let mut reader = system_state.get(app.world()).1;
+        let mut reader = system_state.get(app.world());
         let mut events = reader.read();
-        assert_eq!(1, events.len());
         assert_matches!(events.next().unwrap(), SqlxEventStatus::Start(_));
     }
 
@@ -409,12 +407,9 @@ mod tests {
         let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
         app.world_mut().send_event(insert);
 
-        skip_started_event(&mut app, &mut system_state);
-        wait_for_event(&mut app, &mut system_state);
-
-        let mut reader = system_state.get(app.world());
-        let mut events = reader.read();
-        assert_matches!(events.next().unwrap(), SqlxEventStatus::Spawn(_, _, _))
+        wait_for_status(&mut app, &mut system_state, |status| {
+            assert_matches!(status, SqlxEventStatus::Spawn(_, _, _));
+        });
     }
 
     #[test]
@@ -426,15 +421,6 @@ mod tests {
 
         app.world_mut().spawn(Foo { id: 1, text: "update".into() });
 
-        // let sql = r#"
-        //     IF NOT EXISTS (SELECT * FROM foos WHERE id = 1)
-        //         INSERT INTO foos (text)
-        //         VALUES ('update')
-        //     ELSE
-        //         UPDATE foos
-        //         SET text = 'update'
-        //         WHERE id = 1
-        // "#;
         let sql = r#"
             INSERT INTO foos (id, text) VALUES (1, 'return')
             ON CONFLICT(id) DO UPDATE
@@ -444,15 +430,9 @@ mod tests {
         let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
         app.world_mut().send_event(insert);
 
-        skip_started_event(&mut app, &mut system_state);
-        wait_for_event(&mut app, &mut system_state);
-
-        let mut reader = system_state.get(app.world());
-        let mut events = reader.read();
-        assert_matches!(
-            events.next().unwrap(),
-            SqlxEventStatus::Update(_, _, _)
-        )
+        wait_for_status(&mut app, &mut system_state, |status| {
+            assert_matches!(status, SqlxEventStatus::Update(_, _, _));
+        });
     }
 
     #[test]
@@ -466,16 +446,36 @@ mod tests {
         let insert = SqlxEvent::<Sqlite, Foo>::query(sql);
         app.world_mut().send_event(insert);
 
-        skip_started_event(&mut app, &mut system_state);
-        wait_for_event(&mut app, &mut system_state);
+        wait_for_status(&mut app, &mut system_state, |status| {
+            assert_matches!(status,
+                SqlxEventStatus::Return(_, components)
+                    if components[0].text == "return");
+        });
+    }
 
-        let mut reader = system_state.get(app.world());
-        let mut events = reader.read();
-        assert_matches!(
-            events.next().unwrap(),
-            SqlxEventStatus::Return(_, components) if
-                components[0].text == "return"
-        )
+    #[test]
+    fn test_event_status_error() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        > = SystemState::new(app.world_mut());
+
+        let insert = SqlxEvent::<Sqlite, Foo>::query("SELECT * FROM nope");
+        let id = insert.id();
+        app.world_mut().send_event(insert);
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            app.update();
+            let mut reader = system_state.get(app.world());
+            if reader.read().any(|status| {
+                matches!(status, SqlxEventStatus::Error(i, _) if *i == id)
+            }) {
+                break;
+            }
+            assert!(Instant::now() < deadline, "timed out waiting for error");
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 
     // TODO: Add tests for multicurrent in-flight events (w/ IDs)

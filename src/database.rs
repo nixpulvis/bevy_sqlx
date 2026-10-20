@@ -6,7 +6,7 @@ use sqlx::{Database, Pool};
 ///
 /// ### Example
 ///
-/// ```
+/// ```no_run
 /// use bevy::prelude::*;
 /// use sqlx::Sqlite;
 /// use bevy_sqlx::{SqlxPlugin, SqlxDatabase};
@@ -21,7 +21,7 @@ use sqlx::{Database, Pool};
 ///
 /// fn resource(db: Res<SqlxDatabase<Sqlite>>) {
 ///     let record = bevy::tasks::block_on(async {
-///         sqlx::query!("SELECT (1) as id, 'test' as text")
+///         sqlx::query_as::<_, (i64, String)>("SELECT 1 AS id, 'test' AS text")
 ///             .fetch_one(&db.pool)
 ///             .await.unwrap()
 ///     });

@@ -27,7 +27,7 @@
 //!
 //! - Add the [`SqlxPlugin`] to the [`App`](bevy::prelude::App)
 //!
-//! ```
+//! ```no_run
 //! # use bevy::prelude::*;
 //! # use sqlx::{FromRow, Sqlite};
 //! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, PrimaryKey};
@@ -49,7 +49,7 @@
 //! - Send events with [`SqlxEvent::query`] or [`SqlxEvent::call`] to query
 //! the database
 //!
-//! ```
+//! ```no_run
 //! # use bevy::prelude::*;
 //! # use sqlx::{FromRow, Sqlite};
 //! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, PrimaryKey};
@@ -102,7 +102,7 @@
 //! - Send events with [`SqlxEvent::query_sync`] or [`SqlxEvent::call_sync`] to
 //! query the database
 //!
-//! ```
+//! ```no_run
 //! # use bevy::prelude::*;
 //! # use sqlx::{FromRow, Sqlite};
 //! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, PrimaryKey};
@@ -124,7 +124,7 @@
 //!
 //! - Notice the effects of [`SqlxTasks::handle_tasks`]
 //!
-//! ```
+//! ```no_run
 //! # use bevy::prelude::*;
 //! # use sqlx::{FromRow, Sqlite};
 //! # use bevy_sqlx::{SqlxPlugin, SqlxEvent, PrimaryKey};

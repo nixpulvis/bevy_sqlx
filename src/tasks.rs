@@ -23,7 +23,8 @@ use std::marker::PhantomData;
 /// ```
 #[derive(Resource, Debug)]
 pub struct SqlxTasks<DB: Database, C: SqlxComponent<DB::Row>> {
-    pub(crate) components: Vec<(SqlxEventId, bool, Task<Result<Vec<C>, Error>>)>,
+    pub(crate) components:
+        Vec<(SqlxEventId, bool, Task<Result<Vec<C>, Error>>)>,
     _r: PhantomData<DB::Row>,
 }
 
@@ -114,6 +115,7 @@ where
                             }
                         }
                         Err(err) => {
+                            warn!("sqlx event {id} failed: {err}");
                             status.send(SqlxEventStatus::Error(*id, err));
                         }
                     }
