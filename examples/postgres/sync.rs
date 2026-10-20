@@ -10,9 +10,9 @@ struct Foo {
 }
 
 impl PrimaryKey for Foo {
-    type Column = i32;
+    type Key = i32;
 
-    fn primary_key(&self) -> Self::Column {
+    fn primary_key(&self) -> Self::Key {
         self.id
     }
 }

@@ -14,9 +14,9 @@ struct Foo {
 }
 
 impl PrimaryKey for Foo {
-    type Column = u32;
+    type Key = u32;
 
-    fn primary_key(&self) -> Self::Column {
+    fn primary_key(&self) -> Self::Key {
         self.id
     }
 }
@@ -80,9 +80,9 @@ struct Bar {
 }
 
 impl PrimaryKey for Bar {
-    type Column = u32;
+    type Key = u32;
 
-    fn primary_key(&self) -> Self::Column {
+    fn primary_key(&self) -> Self::Key {
         self.id
     }
 }

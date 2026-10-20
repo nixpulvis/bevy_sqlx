@@ -42,8 +42,8 @@ pub fn next_event_id() -> SqlxEventId {
 /// # #[derive(Component, FromRow, Debug)]
 /// # struct Foo(u32);
 /// # impl PrimaryKey for Foo {
-/// #     type Column = u32;
-/// #     fn primary_key(&self) -> Self::Column { self.0 }
+/// #     type Key = u32;
+/// #     fn primary_key(&self) -> Self::Key { self.0 }
 /// # }
 /// fn insert(mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
 ///     let sql = "INSERT INTO foos(text) VALUES ('test') RETURNING *";
@@ -192,8 +192,8 @@ where
 pub enum SqlxEventStatus<DB: Database, C: SqlxComponent<DB::Row>> {
     Start(SqlxEventId),
     Return(SqlxEventId, Vec<C>),
-    Spawn(SqlxEventId, C::Column, PhantomData<DB>),
-    Update(SqlxEventId, C::Column, PhantomData<DB>),
+    Spawn(SqlxEventId, C::Key, PhantomData<DB>),
+    Update(SqlxEventId, C::Key, PhantomData<DB>),
     Error(SqlxEventId, Error),
 }
 
@@ -255,8 +255,8 @@ mod tests {
     }
 
     impl PrimaryKey for Foo {
-        type Column = u32;
-        fn primary_key(&self) -> Self::Column {
+        type Key = u32;
+        fn primary_key(&self) -> Self::Key {
             self.id
         }
     }
@@ -418,20 +418,100 @@ mod tests {
         let mut system_state: SystemState<
             EventReader<SqlxEventStatus<Sqlite, Foo>>,
         > = SystemState::new(app.world_mut());
+        let mut query_state: SystemState<Query<&Foo>> =
+            SystemState::new(app.world_mut());
 
-        app.world_mut().spawn(Foo { id: 1, text: "update".into() });
-
-        let sql = r#"
-            INSERT INTO foos (id, text) VALUES (1, 'return')
-            ON CONFLICT(id) DO UPDATE
-            SET text = 'update'
-            RETURNING *
-        "#;
+        let sql = "INSERT INTO foos (id, text) VALUES (1, 'spawn') RETURNING *";
         let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
         app.world_mut().send_event(insert);
-
         wait_for_status(&mut app, &mut system_state, |status| {
-            assert_matches!(status, SqlxEventStatus::Update(_, _, _));
+            assert_matches!(status, SqlxEventStatus::Spawn(_, 1, _));
+        });
+
+        let sql = "UPDATE foos SET text = 'update' WHERE id = 1 RETURNING *";
+        let update = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
+        app.world_mut().send_event(update);
+        wait_for_status(&mut app, &mut system_state, |status| {
+            assert_matches!(status, SqlxEventStatus::Update(_, 1, _));
+        });
+
+        let query = query_state.get(app.world());
+        assert_eq!("update", query.single().text);
+    }
+
+    #[test]
+    fn test_same_frame_sync_does_not_duplicate() {
+        let mut app = setup_app();
+        let mut query_state: SystemState<Query<&Foo>> =
+            SystemState::new(app.world_mut());
+
+        let pool = app.world().resource::<SqlxDatabase<Sqlite>>().pool.clone();
+        block_on(async {
+            sqlx::query("INSERT INTO foos (text) VALUES ('a'), ('b')")
+                .execute(&pool)
+                .await
+                .unwrap();
+        });
+
+        let sql = "SELECT * FROM foos";
+        app.world_mut().send_event(SqlxEvent::<Sqlite, Foo>::query_sync(sql));
+        app.world_mut().send_event(SqlxEvent::<Sqlite, Foo>::query_sync(sql));
+
+        // Start both tasks, then wait until both have finished so they're
+        // handled in the same `handle_tasks` run.
+        app.update();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !app
+            .world()
+            .resource::<SqlxTasks<Sqlite, Foo>>()
+            .components
+            .iter()
+            .all(|(_, _, task)| task.is_finished())
+        {
+            assert!(Instant::now() < deadline, "timed out waiting for tasks");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        app.update();
+
+        assert!(app.world().resource::<SqlxTasks<Sqlite, Foo>>().is_empty());
+        assert_eq!(2, query_state.get(app.world()).iter().len());
+        assert_eq!(2, app.world().resource::<SqlxIndex<Foo>>().len());
+    }
+
+    #[test]
+    fn test_index_follows_despawn_and_removal() {
+        let mut app = setup_app();
+        let mut system_state: SystemState<
+            EventReader<SqlxEventStatus<Sqlite, Foo>>,
+        > = SystemState::new(app.world_mut());
+
+        let sql = "INSERT INTO foos (text) VALUES ('a'), ('b') RETURNING *";
+        let insert = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
+        app.world_mut().send_event(insert);
+        wait_for_status(&mut app, &mut system_state, |_| {});
+        // Skip the second row's `Spawn`, sent in the same update.
+        system_state.get(app.world()).clear();
+
+        let index = app.world().resource::<SqlxIndex<Foo>>();
+        let a = index.entity(&1).unwrap();
+        let b = index.entity(&2).unwrap();
+        assert_eq!(Some(&1), index.key(a));
+        assert!(index.synced_at(a).is_some());
+
+        app.world_mut().despawn(a);
+        app.world_mut().entity_mut(b).remove::<Foo>();
+
+        let index = app.world().resource::<SqlxIndex<Foo>>();
+        assert!(index.is_empty());
+        assert_eq!(None, index.key(a));
+        assert_eq!(None, index.synced_at(b));
+
+        // Syncing the row again spawns a fresh entity for it.
+        let sql = "SELECT * FROM foos WHERE id = 1";
+        let select = SqlxEvent::<Sqlite, Foo>::query_sync(sql);
+        app.world_mut().send_event(select);
+        wait_for_status(&mut app, &mut system_state, |status| {
+            assert_matches!(status, SqlxEventStatus::Spawn(_, 1, _));
         });
     }
 

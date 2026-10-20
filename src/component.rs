@@ -19,6 +19,7 @@
 //! TODO: Explain `ToRow` and `FromRow` here.
 use bevy::prelude::*;
 use sqlx::{FromRow, Row};
+use std::hash::Hash;
 
 /// Rows in the database represent a spesifc [`Component`]
 pub trait SqlxComponent<R: Row>:
@@ -34,12 +35,18 @@ where
 }
 
 /// A way to identify components by themselves
-//
-// TODO: Look into impl PartialEq<PrimaryKey<...>> for Foo
+///
+/// The key is what [`SqlxIndex`](crate::SqlxIndex) maps to entities, so two
+/// components with equal keys are the same row.
 pub trait PrimaryKey {
-    type Column: Clone + PartialEq + Send + Sync;
-    // fn primary_key_name() -> &'static str;
-    fn primary_key(&self) -> Self::Column;
+    /// The type of the primary key column
+    type Key: Clone + Eq + Hash + Send + Sync + 'static;
+
+    /// The name of the primary key column
+    const PRIMARY_KEY: &'static str = "id";
+
+    /// The primary key of this component's row
+    fn primary_key(&self) -> Self::Key;
 }
 
 /// A record that can be upserted into the database
@@ -51,6 +58,6 @@ pub trait ToRow {}
 #[derive(Component, FromRow, Debug, Clone)]
 pub struct SqlxDummy {}
 impl PrimaryKey for SqlxDummy {
-    type Column = ();
+    type Key = ();
     fn primary_key(&self) {}
 }
