@@ -1,5 +1,4 @@
 use crate::*;
-use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{block_on, Task};
@@ -45,85 +44,75 @@ where
     ///
     /// If [`SqlxEvent::will_sync`] was `true`:
     ///
-    /// When a task is finished, we check if the component of type `C` is
-    /// already spawned:
-    /// - If it is, we just `insert` the new component over the existing one
-    /// and send an [`SqlxEventStatus::Update`]
-    /// - If it isn't, we `spawn` a new entity with the new component and send
-    /// an [`SqlxEventStatus::Spawn`]
+    /// For each component returned, we look up its primary key in
+    /// [`SqlxIndex<C>`]:
+    /// - If an entity is indexed under that key, we `insert` the new component
+    /// over the existing one and send an [`SqlxEventStatus::Update`]
+    /// - If not, we `spawn` a new entity with the new component and send an
+    /// [`SqlxEventStatus::Spawn`]
+    ///
+    /// Either way the entity is recorded in the index straight away, so a row
+    /// returned again later in the same frame updates it instead of spawning
+    /// a duplicate.
     ///
     /// If [`SqlxEvent::will_sync`] was `false`:
     ///
     /// - We send an [`SqlxEventStatus::Return`] with the component itself.
-    pub fn handle_tasks(
-        world: &mut World,
-        params: &mut SystemState<(
-            Query<(Entity, Ref<C>)>,
-            Commands,
-            ResMut<Self>,
-            EventWriter<SqlxEventStatus<DB, C>>,
-        )>,
-    ) {
-        let (mut query, mut commands, mut tasks, mut status) =
-            params.get_mut(world);
+    pub fn handle_tasks(world: &mut World) {
+        let mut finished = Vec::new();
+        world.resource_mut::<Self>().components.retain_mut(
+            |(id, sync, task)| match block_on(future::poll_once(task)) {
+                Some(result) => {
+                    finished.push((*id, *sync, result));
+                    false
+                }
+                None => true,
+            },
+        );
 
-        tasks.components.retain_mut(|(id, sync, task)| {
-            block_on(future::poll_once(task))
-                .map(|result| {
-                    match result {
-                        Ok(task_components) => {
-                            if *sync {
-                                for task_component in task_components {
-                                    // Check if the task's component is already spawned.
-                                    let mut existing_entity = None;
-                                    for (entity, spawned_component) in
-                                        &mut query
-                                    {
-                                        if task_component.primary_key()
-                                            == spawned_component.primary_key()
-                                        {
-                                            existing_entity = Some(entity);
-                                            break;
-                                        }
-                                    }
-
-                                    if let Some(entity) = existing_entity {
-                                        status.send(SqlxEventStatus::Update(
-                                            *id,
-                                            task_component.primary_key(),
-                                            PhantomData,
-                                        ));
-                                        commands
-                                            .entity(entity)
-                                            .insert(task_component);
-                                    } else {
-                                        status.send(SqlxEventStatus::Spawn(
-                                            *id,
-                                            task_component.primary_key(),
-                                            PhantomData,
-                                        ));
-                                        // TODO: Look into world.spawn_batch
-                                        // after taking set disjunction of ids.
-                                        commands.spawn(task_component);
-                                    }
-                                }
-                            } else {
-                                status.send(SqlxEventStatus::Return(
-                                    *id,
-                                    task_components,
-                                ));
-                            }
-                        }
-                        Err(err) => {
-                            warn!("sqlx event {id} failed: {err}");
-                            status.send(SqlxEventStatus::Error(*id, err));
-                        }
+        for (id, sync, result) in finished {
+            match result {
+                Ok(task_components) if sync => {
+                    for task_component in task_components {
+                        Self::sync_component(world, id, task_component);
                     }
-                })
-                .is_none()
-        });
+                }
+                Ok(task_components) => {
+                    world.send_event(SqlxEventStatus::<DB, C>::Return(
+                        id,
+                        task_components,
+                    ));
+                }
+                Err(err) => {
+                    warn!("sqlx event {id} failed: {err}");
+                    world.send_event(SqlxEventStatus::<DB, C>::Error(id, err));
+                }
+            }
+        }
+    }
 
-        params.apply(world);
+    /// Spawn or update the entity for `component`'s row, and index it
+    fn sync_component(world: &mut World, id: SqlxEventId, component: C) {
+        let key = component.primary_key();
+        let existing = world
+            .resource::<SqlxIndex<C>>()
+            .entity(&key)
+            .filter(|entity| world.get_entity(*entity).is_some());
+
+        let (entity, status) = match existing {
+            Some(entity) => {
+                world.entity_mut(entity).insert(component);
+                (entity, SqlxEventStatus::Update(id, key.clone(), PhantomData))
+            }
+            None => {
+                let entity = world.spawn(component).id();
+                (entity, SqlxEventStatus::Spawn(id, key.clone(), PhantomData))
+            }
+        };
+
+        let tick = world.entity(entity).get_ref::<C>().unwrap().last_changed();
+        world.resource_mut::<SqlxIndex<C>>().insert(key, entity, tick);
+        world.send_event::<SqlxEventStatus<DB, C>>(status);
     }
 
     pub fn count(&self) -> usize {

@@ -20,8 +20,8 @@
 //! }
 //!
 //! impl PrimaryKey for Foo {
-//!     type Column = u32;
-//!     fn primary_key(&self) -> Self::Column { self.id }
+//!     type Key = u32;
+//!     fn primary_key(&self) -> Self::Key { self.id }
 //! }
 //! ```
 //!
@@ -34,8 +34,8 @@
 //! # #[derive(Component, FromRow)]
 //! # struct Foo(u32);
 //! # impl PrimaryKey for Foo {
-//! #     type Column = u32;
-//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! #     type Key = u32;
+//! #     fn primary_key(&self) -> Self::Key { self.0 }
 //! # }
 //! let url = "sqlite:db/sqlite.db";
 //! let app = App::new()
@@ -56,8 +56,8 @@
 //! # #[derive(Component, FromRow)]
 //! # struct Foo(u32);
 //! # impl PrimaryKey for Foo {
-//! #     type Column = u32;
-//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! #     type Key = u32;
+//! #     fn primary_key(&self) -> Self::Key { self.0 }
 //! # }
 //! # let url = "sqlite:db/sqlite.db";
 //! # let mut app = App::new();
@@ -78,8 +78,8 @@
 //! # #[derive(Component, FromRow, Debug)]
 //! # struct Foo(u32);
 //! # impl PrimaryKey for Foo {
-//! #     type Column = u32;
-//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! #     type Key = u32;
+//! #     fn primary_key(&self) -> Self::Key { self.0 }
 //! # }
 //! fn status(
 //!     foos: Query<&Foo>,
@@ -109,8 +109,8 @@
 //! # #[derive(Component, FromRow)]
 //! # struct Foo(u32);
 //! # impl PrimaryKey for Foo {
-//! #     type Column = u32;
-//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! #     type Key = u32;
+//! #     fn primary_key(&self) -> Self::Key { self.0 }
 //! # }
 //! # let url = "sqlite:db/sqlite.db";
 //! # let mut app = App::new();
@@ -131,8 +131,8 @@
 //! # #[derive(Component, FromRow, Debug)]
 //! # struct Foo(u32);
 //! # impl PrimaryKey for Foo {
-//! #     type Column = u32;
-//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! #     type Key = u32;
+//! #     fn primary_key(&self) -> Self::Key { self.0 }
 //! # }
 //! # let url = "sqlite:db/sqlite.db";
 //! # let mut app = App::new();
@@ -155,8 +155,8 @@
 //! # #[derive(Component, FromRow, Debug)]
 //! # struct Foo(u32);
 //! # impl PrimaryKey for Foo {
-//! #     type Column = u32;
-//! #     fn primary_key(&self) -> Self::Column { self.0 }
+//! #     type Key = u32;
+//! #     fn primary_key(&self) -> Self::Key { self.0 }
 //! # }
 //! fn status(
 //!     foos: Query<&Foo>,
@@ -185,6 +185,9 @@ pub mod event;
 pub use self::event::*;
 mod database;
 pub use self::database::*;
+
+mod index;
+pub use self::index::*;
 
 mod plugin;
 pub use self::plugin::*;

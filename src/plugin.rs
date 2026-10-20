@@ -10,6 +10,7 @@ use std::marker::PhantomData;
 /// This plugin sets up and manages the following:
 /// - A [`SqlxDatabase<DB>`] resource
 /// - A [`SqlxTasks<DB::Row, C>`] resource
+/// - A [`SqlxIndex<C>`] resource, kept current by [`SqlxIndex::on_remove`]
 /// - [`SqlxEvent<DB, C>`] events
 /// - A [`SqlxEvent<DB, C>::handle_events`] system
 /// - A [`SqlxTasks<DB, C>::handle_tasks`] system
@@ -61,6 +62,8 @@ where
     fn build(&self, app: &mut App) {
         app.insert_resource(SqlxDatabase { pool: self.pool.clone() });
         app.insert_resource(SqlxTasks::<DB, C>::default());
+        app.insert_resource(SqlxIndex::<C>::default());
+        app.observe(SqlxIndex::<C>::on_remove);
         app.add_event::<SqlxEvent<DB, C>>();
         app.add_event::<SqlxEventStatus<DB, C>>();
         app.add_systems(Update, SqlxEvent::<DB, C>::handle_events);
