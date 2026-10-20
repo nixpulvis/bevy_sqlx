@@ -12,10 +12,10 @@ postgres-wayland = ["sqlx/postgres", "bevy/bevy_winit", "bevy/wayland"]
 
 
 [dependencies]
-bevy = { version = "0", default-features = false, features = [
+bevy = { version = "0.14", default-features = false, features = [
     "multi_threaded",
 ] }
-sqlx = { version = "0", features = ["runtime-async-std"] }
+sqlx = { version = "0.8", features = ["runtime-async-std"] }
 
 [dev-dependencies]
 rand = "0.8"

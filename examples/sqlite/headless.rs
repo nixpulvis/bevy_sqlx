@@ -62,7 +62,7 @@ fn update(time: Res<Time>, mut events: EventWriter<SqlxEvent<Sqlite, Foo>>) {
     events.send(SqlxEvent::<Sqlite, Foo>::call_sync(move |db| {
         let text = text.clone();
         async move {
-            sqlx::query_as("UPDATE foos SET text = '?'")
+            sqlx::query_as("UPDATE foos SET text = ? RETURNING *")
                 .bind(text)
                 .fetch_all(&db)
                 .await

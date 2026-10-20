@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
-          toolchain: nightly
+          toolchain: stable
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
@@ -24,3 +24,5 @@ jobs:
       run: cargo build --verbose --features sqlx/sqlite
     - name: Build w/ postgres
       run: cargo build --verbose --features sqlx/postgres
+    - name: Test w/ sqlite
+      run: cargo test --verbose --features sqlx/sqlite
